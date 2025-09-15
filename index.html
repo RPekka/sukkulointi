@@ -63,8 +63,9 @@
       </label>
       <button id="clear">Tyhjennä ristikko (huone)</button>
       <span class="grow"></span>
+      <!-- LINKKIGENERAATTORI: HUONE + OTSIKKO -->
       <input id="roomName" type="text" placeholder="Huoneen nimi (esim. POP1)" />
-      <input id="titleAppend" type="text" placeholder="Otsikko (näytetään nimen perässä)" />
+      <input id="roomTitle" type="text" placeholder="Huoneen otsikko (näkyy ylhäällä)" />
       <button id="makeLink">Luo linkki</button>
       <a id="roomLink" class="link" href="#" target="_blank" style="display:none">Avaa huone</a>
     </div>
@@ -79,7 +80,6 @@
     <div class="card" style="margin-bottom:12px;">
       <div style="font-weight:600; margin-bottom:8px;">Pelaa Firebase-pilvessä</div>
       <div class="names" style="gap:10px;">
-        <input id="cloudTitle" type="text" placeholder="Huoneen otsikko (näkyy sivun yläreunassa)" />
         <select id="playerSelect">
           <option value="">— Valitse nimimerkki —</option>
           <option>Enni</option>
@@ -101,7 +101,7 @@
           <button id="releaseTurn" disabled>Luovuta vuoro</button>
           <button id="cloudSave" disabled>Tallenna pilveen</button>
         </div>
-        <div class="muted">Linkki: <code>?mode=firebase&db=...&room=POP1</code>. Otsikko tallentuu pilveen ja näkyy kaikille.</div>
+        <div class="muted">Uuden pelin luonti **alhaalla** (Huoneen nimi + Otsikko → Luo linkki). Pelaajat eivät muuta otsikkoa.</div>
       </div>
     </div>
 
@@ -117,14 +117,10 @@
 const params = new URLSearchParams(location.search);
 const mode = (params.get('mode')||'offline').toLowerCase();
 const room = (params.get('room')||'POP1').trim();
-const extraTitleParam = (params.get('title')||'').trim();
 const dbURL = (params.get('db')||'').replace(/\/$/, '');
 
 const titleEl = document.getElementById('title');
-function setHeader(roomName, extra){
-  titleEl.textContent = 'Sanaristikko '+roomName.toUpperCase()+ (extra? ' — '+extra : '');
-}
-setHeader(room, extraTitleParam);
+function setHeader(roomName, title){ titleEl.textContent = 'Sanaristikko '+roomName.toUpperCase()+ (title? ' — '+title : ''); }
 
 const statusDot = document.getElementById('statusDot');
 const statusText = document.getElementById('statusText');
@@ -137,7 +133,6 @@ const N = 20;
 const gridWrapper = document.getElementById('gridWrapper');
 const lockBlackEl = document.getElementById('lockBlack');
 const namesEl = document.getElementById('names');
-const cloudTitleEl = document.getElementById('cloudTitle');
 
 function keyFor(r,c){ return r+','+c; }
 
@@ -233,18 +228,16 @@ const cloud = {
     const data = await res.json();
     if(!data){ return; }
     Store.cells = data.cells||{}; Store.state = data.state||{lockBlack:true}; Store.names = data.names||{}; Store.active = data.active||null; Store.updatedAt = data.updatedAt||0; Store.meta = data.meta||{title:''};
-    cloudTitleEl.value = Store.meta.title || '';
-    setHeader(room, Store.meta.title || extraTitleParam);
+    setHeader(room, Store.meta.title || '');
     setActiveInfo(Store.active? `Vuoro: ${Store.active.name}` : 'Ei lukkoa');
     render();
   },
   async save(){
     if(Store.active && Store.active.name !== Store.myName){ alert(`Et ole vuorossa (vuoro: ${Store.active.name}).`); return; }
-    Store.meta.title = cloudTitleEl.value.trim();
+    // Huom: meta.title EI muutu tallennuksessa (vain luontihetkellä alhaalla)
     const payload = { cells:Store.cells, state:Store.state, names:Store.names, active:Store.active, meta:Store.meta, updatedAt: Date.now() };
     const res = await fetch(this.pathRoom(), { method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) });
     if(!res.ok) throw new Error('Pilvitallennus epäonnistui');
-    setHeader(room, Store.meta.title || extraTitleParam);
   },
   pollHandle:null,
   startPoll(){
@@ -256,10 +249,9 @@ const cloud = {
         if(data.updatedAt && data.updatedAt !== Store.updatedAt){
           Store.cells = data.cells||{}; Store.state = data.state||{lockBlack:true}; Store.names = data.names||{}; Store.active = data.active||null; Store.meta = data.meta||{title:''}; Store.updatedAt = data.updatedAt; render();
         } else {
-          Store.active = data.active||null; Store.meta = data.meta||{title: Store.meta.title||''};
+          Store.active = data.active||null; // päivitys vähintään vuoroon
         }
-        cloudTitleEl.value = Store.meta.title || '';
-        setHeader(room, Store.meta.title || extraTitleParam);
+        setHeader(room, (data.meta && data.meta.title) || Store.meta.title || '');
         setActiveInfo(Store.active? `Vuoro: ${Store.active.name}` : 'Ei lukkoa');
         applyEditability();
       } catch{}
@@ -267,7 +259,7 @@ const cloud = {
   },
 };
 
-// ——— UI kontrollit ———
+// ——— UI kontrollit (pilvi + vuoro) ———
 const playerSelect = document.getElementById('playerSelect');
 const takeTurnBtn = document.getElementById('takeTurn');
 const releaseTurnBtn = document.getElementById('releaseTurn');
@@ -278,22 +270,10 @@ const autoReleaseEl = document.getElementById('autoRelease');
 playerSelect.addEventListener('change', ()=>{
   Store.myName = playerSelect.value || '';
   takeTurnBtn.disabled = !Store.myName || !cloud.enabled;
-  cloudSaveBtn.disabled = !cloud.enabled; // tallennus sallitaan kun pilvi käytössä
+  cloudSaveBtn.disabled = !cloud.enabled;
 });
 
 lockBlackEl.addEventListener('change', ()=>{ Store.state.lockBlack = !!lockBlackEl.checked; applyEditability(); });
-
-// Paikallinen Tallenna/Lataa
- document.getElementById('save').addEventListener('click', ()=>{
-  const out = { n:N, cells:Store.cells };
-  const blob = new Blob([JSON.stringify(out)], {type:'application/json'});
-  const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=`ristikko-${room}.json`; a.click(); URL.revokeObjectURL(a.href);
-});
-const loadInput = document.getElementById('load');
-document.getElementById('loadBtn').addEventListener('click', ()=> loadInput.click());
-loadInput.addEventListener('change', ()=>{ if(loadInput.files[0]){ const reader=new FileReader(); reader.onload=()=>{ try{ const data=JSON.parse(reader.result); if(!data||!data.cells) throw new Error('Virheellinen tiedosto'); Store.cells=data.cells; render(); } catch(e){ alert('Lataus epäonnistui: '+e.message); } }; reader.readAsText(loadInput.files[0]); } });
-
-document.getElementById('clear').addEventListener('click', ()=>{ if(confirm('Tyhjennetäänkö koko ristikko tältä huoneelta?')){ Store.cells={}; render(); } });
 
 cloudLoadBtn.addEventListener('click', async ()=>{
   if(!cloud.enabled){ alert('Ei pilviyhteyttä: lisää URL-parametrit ?mode=firebase&db=...&room=...'); return; }
@@ -303,11 +283,12 @@ cloudLoadBtn.addEventListener('click', async ()=>{
 
 async function writeActive(to){
   try{
+    // Nouda viimeisin, pidä otsikko muuttumattomana
     const res = await fetch(cloud.pathRoom()); const data = res.ok? await res.json() : null;
-    const base = data||{cells:{},state:{lockBlack:true},names:{},meta:{title: cloudTitleEl.value.trim()||''}};
-    base.active = to; base.updatedAt = Date.now(); base.meta.title = cloudTitleEl.value.trim()||base.meta.title||'';
+    const base = data||{cells:{},state:{lockBlack:true},names:{},meta:{title: Store.meta.title||''}};
+    base.active = to; base.updatedAt = Date.now();
     await fetch(cloud.pathRoom(), { method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(base) });
-    Store.active = to; Store.updatedAt = base.updatedAt; Store.meta = base.meta; setHeader(room, Store.meta.title || extraTitleParam); setActiveInfo(Store.active? `Vuoro: ${Store.active.name}` : 'Ei lukkoa'); applyEditability();
+    Store.active = to; Store.updatedAt = base.updatedAt; Store.meta = base.meta; setHeader(room, Store.meta.title||''); setActiveInfo(Store.active? `Vuoro: ${Store.active.name}` : 'Ei lukkoa'); applyEditability();
   } catch (e){ alert('Vuoron kirjaus epäonnistui'); }
 }
 
@@ -342,15 +323,32 @@ applyEditability();
 
 if(mode==='firebase' && dbURL){ setStatus('', 'Valmis Firebaseen – paina "Lataa pilvestä"'); } else { setStatus('', 'Offline-tila (paikallinen)'); }
 
-// Linkkigeneraattori
+// ——— LINKKIGENERAATTORI: luo uusi huone + otsikko pilveen ———
 const roomNameEl = document.getElementById('roomName');
-const titleAppendEl = document.getElementById('titleAppend');
+const roomTitleEl = document.getElementById('roomTitle');
 const roomLink = document.getElementById('roomLink');
-document.getElementById('makeLink').addEventListener('click', ()=>{
+
+async function createRoomInCloud(name, title){
+  if(!dbURL){ alert('Lisää URL-parametriksi db=... jotta pilvitallennus toimii.'); return; }
+  const path = `${dbURL.replace(/\/$/,'')}/rooms/${encodeURIComponent(name)}.json`;
+  try{
+    // Jos huone on jo, älä sotke olemassa olevia kirjaimia
+    const cur = await fetch(path); const curData = cur.ok? await cur.json() : null;
+    const payload = curData || { cells:{}, state:{lockBlack:true}, names:{}, active:null, meta:{title:''}, updatedAt:0 };
+    payload.meta.title = title||payload.meta.title||'';
+    if(!curData){ payload.updatedAt = Date.now(); }
+    await fetch(path, { method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+  } catch(e){ alert('Huoneen luonti pilveen epäonnistui'); }
+}
+
+document.getElementById('makeLink').addEventListener('click', async ()=>{
   const name = (roomNameEl.value || room).trim();
-  const extra = (titleAppendEl.value || '').trim();
-  const url = new URL(location.href); url.searchParams.set('room', name); if(extra) url.searchParams.set('title', extra);
-  roomLink.href = url.toString(); roomLink.style.display='inline'; roomLink.textContent='Avaa huone: '+name+(extra? ' — '+extra : '');
+  const title = (roomTitleEl.value || '').trim();
+  // Kirjoita otsikko pilveen (ei muuta kirjaimia jos huone jo on)
+  if(mode==='firebase' && dbURL){ await createRoomInCloud(name, title); }
+  // Rakenna jaettava linkki (ei tarvita title-paramia)
+  const url = new URL(location.href); url.searchParams.set('room', name); url.searchParams.set('mode','firebase'); url.searchParams.set('db', dbURL);
+  roomLink.href = url.toString(); roomLink.style.display='inline'; roomLink.textContent='Avaa huone: '+name+(title? ' — '+title : '');
 });
 </script>
 </body>
