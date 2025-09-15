@@ -85,6 +85,7 @@
 // ja ruudukko renderöidään joka tapauksessa.
 import * as Y from 'https://cdn.jsdelivr.net/npm/yjs@13.6.18/+esm';
 import { WebsocketProvider } from 'https://cdn.jsdelivr.net/npm/y-websocket@1.5.4/+esm';
+import { WebrtcProvider } from 'https://cdn.jsdelivr.net/npm/y-webrtc@10.3.7/+esm';
 
 (async function(){
   const params = new URLSearchParams(location.search);
@@ -132,19 +133,32 @@ import { WebsocketProvider } from 'https://cdn.jsdelivr.net/npm/y-websocket@1.5.
 
   // WebSocket-sync (valinnainen)
   let provider = null;
+let connected = false;
+try {
+  provider = new WebsocketProvider('wss://demos.yjs.dev', 'crossword-'+room.toLowerCase(), ydoc);
+  provider.on('status', (e)=>{
+    if(e.status === 'connected'){
+      connected = true;
+      if(statusDot){ statusDot.classList.add('ok'); statusDot.classList.remove('err'); }
+      if(statusText) statusText.textContent='Yhdistetty (WebSocket) – muutokset synkassa';
+    } else {
+      if(!connected && statusText) statusText.textContent = persistenceOk ? 'Yritetään yhteyttä…' : 'Ei yhteyttä';
+    }
+  });
+  provider.on('connection-error', ()=>{ if(!connected) showError('WS-yhteysvirhe – kokeillaan WebRTC:tä'); });
+} catch(e){ showError('WS-yhteyden muodostus epäonnistui'); }
+
+setTimeout(()=>{
+  if(connected) return;
   try {
-    provider = new WebsocketProvider('wss://demos.yjs.dev', 'crossword-'+room.toLowerCase(), ydoc);
-    provider.on('status', (e)=>{
-      if(e.status === 'connected'){
-        if(statusDot){ statusDot.classList.add('ok'); statusDot.classList.remove('err'); }
-        if(statusText) statusText.textContent='Yhdistetty – muutokset synkassa';
-      } else {
-        if(statusDot){ statusDot.classList.remove('ok'); }
-        if(statusText) statusText.textContent = persistenceOk ? 'Ei yhteyttä – tallennetaan paikallisesti' : 'Ei yhteyttä';
-      }
+    const rtc = new WebrtcProvider('crossword-'+room.toLowerCase(), ydoc, {
+      signaling: ['wss://signaling.yjs.dev', 'wss://y-webrtc-signaling-eu.herokuapp.com'],
+      peerOpts: { config: { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] } }
     });
-    provider.on('connection-error', ()=> showError('Yhteysvirhe – jatketaan paikallisesti'));
-  } catch(e){ showError('Yhteyden muodostus epäonnistui'); }
+    if(statusText) statusText.textContent = 'Yhdistetty (WebRTC) – muutokset synkassa';
+    if(statusDot){ statusDot.classList.add('ok'); statusDot.classList.remove('err'); }
+  } catch(err){ showError('WebRTC-yhteys epäonnistui – jatketaan paikallisesti'); }
+}, 4000);
 
   const ycells = ydoc.getMap('cells');
   const ystate = ydoc.getMap('state');
