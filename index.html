@@ -81,34 +81,70 @@
 </div>
 
 <script type="module">
+// Turvallinen lataus: jos y-indexeddb ei toimi, käytetään localStorage-varmuutta,
+// ja ruudukko renderöidään joka tapauksessa.
 import * as Y from 'https://cdn.jsdelivr.net/npm/yjs@13.6.18/+esm';
 import { WebsocketProvider } from 'https://cdn.jsdelivr.net/npm/y-websocket@1.5.4/+esm';
-import { IndexeddbPersistence } from 'https://cdn.jsdelivr.net/npm/y-indexeddb@1.0.10/+esm';
 
-(function(){
+(async function(){
   const params = new URLSearchParams(location.search);
   const room = (params.get('room')||'POP1').trim();
   const extraTitle = (params.get('title')||'').trim();
   updateHeader(room, extraTitle);
 
-  // Yjs init + paikallinen pysyvyys + websocket-sync
-  const ydoc = new Y.Doc();
-  const persist = new IndexeddbPersistence('crossword-'+room.toLowerCase(), ydoc);
+  // Apufunktio näkyvälle virheilmoitukselle
   const statusDot = document.getElementById('statusDot');
   const statusText = document.getElementById('statusText');
+  function showError(msg){ if(statusDot){ statusDot.classList.add('err'); statusText.textContent = msg; } }
 
+  // Yjs-asiakirja
+  const ydoc = new Y.Doc();
+
+  // Paikallinen pysyvyys: y-indexeddb jos saatavilla, muuten localStorage-backup
+  let persistenceOk = false;
+  try {
+    const mod = await import('https://cdn.jsdelivr.net/npm/y-indexeddb@1.0.10/+esm');
+    const persist = new mod.IndexeddbPersistence('crossword-'+room.toLowerCase(), ydoc);
+    persist.whenSynced.then(()=>{ persistenceOk = true; });
+  } catch(e){
+    // localStorage fallback
+    try {
+      const key = 'crossword-ls-'+room.toLowerCase();
+      const snap = localStorage.getItem(key);
+      if(snap){
+        const data = JSON.parse(snap);
+        const ycells = ydoc.getMap('cells');
+        if(data && data.cells){
+          for(const k in data.cells){ ycells.set(k, JSON.stringify(data.cells[k])); }
+        }
+      }
+      // myöhemmin tallennus
+      ydoc.on('update', ()=>{
+        const ycells = ydoc.getMap('cells');
+        const out = { cells:{} };
+        ycells.forEach((v,k)=>{ out.cells[k] = JSON.parse(v); });
+        localStorage.setItem(key, JSON.stringify(out));
+      });
+      persistenceOk = true;
+      if(statusText) statusText.textContent = 'Paikallinen tallennus käytössä (localStorage)';
+    } catch(err){ showError('Paikallinen tallennus ei käytössä'); }
+  }
+
+  // WebSocket-sync (valinnainen)
   let provider = null;
   try {
     provider = new WebsocketProvider('wss://demos.yjs.dev', 'crossword-'+room.toLowerCase(), ydoc);
     provider.on('status', (e)=>{
-      if(e.status === 'connected'){ statusDot.classList.add('ok'); statusDot.classList.remove('err'); statusText.textContent='Yhdistetty – muutokset synkassa'; }
-      else { statusDot.classList.remove('ok'); statusText.textContent='Ei yhteyttä – tallennetaan paikallisesti'; }
+      if(e.status === 'connected'){
+        if(statusDot){ statusDot.classList.add('ok'); statusDot.classList.remove('err'); }
+        if(statusText) statusText.textContent='Yhdistetty – muutokset synkassa';
+      } else {
+        if(statusDot){ statusDot.classList.remove('ok'); }
+        if(statusText) statusText.textContent = persistenceOk ? 'Ei yhteyttä – tallennetaan paikallisesti' : 'Ei yhteyttä';
+      }
     });
-    provider.on('connection-error', ()=>{ statusDot.classList.add('err'); statusText.textContent='Yhteysvirhe – jatketaan paikallisesti'; });
-  } catch(e) {
-    statusDot.classList.add('err'); statusText.textContent='Yhteys epäonnistui – paikallinen tila käytössä';
-    console.warn('Realtime-yhteyttä ei saatu:', e);
-  }
+    provider.on('connection-error', ()=> showError('Yhteysvirhe – jatketaan paikallisesti'));
+  } catch(e){ showError('Yhteyden muodostus epäonnistui'); }
 
   const ycells = ydoc.getMap('cells');
   const ystate = ydoc.getMap('state');
@@ -119,11 +155,9 @@ import { IndexeddbPersistence } from 'https://cdn.jsdelivr.net/npm/y-indexeddb@1
   const lockBlackEl = document.getElementById('lockBlack');
   const namesEl = document.getElementById('names');
 
-  // Jos uusi huone (ei soluja) ja asetusta ei vielä ole, lukitse mustat oletuksena
-  persist.whenSynced.then(()=>{
-    if(ycells.size === 0 && !ystate.has('lockBlack')) ystate.set('lockBlack', true);
-    lockBlackEl.checked = !!ystate.get('lockBlack');
-  });
+  // Oletus: uusi huone -> mustat lukossa
+  if(ycells.size === 0 && !ystate.has('lockBlack')) ystate.set('lockBlack', true);
+  if(lockBlackEl) lockBlackEl.checked = !!ystate.get('lockBlack');
 
   function keyFor(r,c){ return r+','+c; }
   function getCell(r,c){ const raw = ycells.get(keyFor(r,c)); return raw?JSON.parse(raw):{ v:'', b:false }; }
@@ -139,6 +173,7 @@ import { IndexeddbPersistence } from 'https://cdn.jsdelivr.net/npm/y-indexeddb@1
   }
 
   function render(){
+    if(!gridWrapper) return;
     gridWrapper.innerHTML='';
     const topRow=document.createElement('div');
     topRow.className='labels-row';
@@ -188,7 +223,7 @@ import { IndexeddbPersistence } from 'https://cdn.jsdelivr.net/npm/y-indexeddb@1
     gridWrapper.appendChild(bottomRow);
   }
 
-  ycells.observe(render); ystate.observe(()=>{ lockBlackEl.checked=!!ystate.get('lockBlack'); }); render();
+  ycells.observe(render); ystate.observe(()=>{ if(lockBlackEl) lockBlackEl.checked=!!ystate.get('lockBlack'); }); render();
 
   // Tallennus / lataus
   function exportJSON(){
@@ -226,7 +261,7 @@ import { IndexeddbPersistence } from 'https://cdn.jsdelivr.net/npm/y-indexeddb@1
   });
 
   // Lukitse mustat (jaettu asetus)
-  lockBlackEl.addEventListener('change', ()=>{ ystate.set('lockBlack', !!lockBlackEl.checked); });
+  document.getElementById('lockBlack').addEventListener('change', (e)=>{ ystate.set('lockBlack', !!e.target.checked); });
 
   // Huonelinkki (nimi + otsikko)
   const roomName = document.getElementById('roomName');
@@ -243,9 +278,11 @@ import { IndexeddbPersistence } from 'https://cdn.jsdelivr.net/npm/y-indexeddb@1
     roomLink.textContent = 'Avaa huone: '+name+(extra? ' — '+extra : '');
   });
 
-  // Pelaajanimet (10 kenttää, synkattu) – rakennetaan kerran, ei uudelleenrenderöintiä joka näppäyksellä
+  // Pelaajanimet (10 kenttää, synkattu)
+  const namesEl = document.getElementById('names');
   const nameInputs = [];
   function buildNames(){
+    if(!namesEl) return;
     namesEl.innerHTML='';
     for(let i=0;i<10;i++){
       const inp=document.createElement('input');
