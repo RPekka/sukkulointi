@@ -5,140 +5,86 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Yhteinen sanaristikko (reaaliaikainen)</title>
   <style>
-    :root { --cell: 36px; --gap: 2px; font-family: system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, Arial, sans-serif; }
-    body { margin: 0; background: #0b1116; color: #e6edf3; display: grid; place-items: center; min-height: 100dvh; }
-    .app { width: min(94vw, 980px); padding: 20px; }
-    header { display:flex; gap:10px; align-items:center; justify-content:space-between; margin-bottom:12px; }
-    h1 { font-size: 20px; margin: 0; font-weight: 600; }
-    .row { display:flex; gap:10px; flex-wrap: wrap; align-items:center; }
-    input[type="number"] { width: 6ch; }
-    button, input, select { background:#0f1720; color:#e6edf3; border:1px solid #233041; border-radius:10px; padding:8px 10px; }
-    button:hover { background:#142033; cursor:pointer; }
-    .grid { display:grid; grid-template-columns: repeat(var(--n), var(--cell)); gap: var(--gap); background:#233041; padding: var(--gap); border-radius:12px; box-shadow: 0 10px 30px #00000055; }
-    .cell { width: var(--cell); height: var(--cell); display:grid; place-items:center; background:#0f1720; border-radius:6px; position:relative; }
-    .cell input { width: 100%; height: 100%; text-align:center; font-weight:700; font-size: 18px; text-transform:uppercase; background: transparent; border: none; color:#e6edf3; outline:none; }
+    :root { --cell: 32px; --gap: 2px; font-family: system-ui, sans-serif; }
+    body { margin:0; background:#0b1116; color:#e6edf3; display:grid; place-items:center; min-height:100dvh; }
+    .app { width:min(96vw,1100px); padding:20px; }
+    h1 { font-size:20px; margin:0; font-weight:600; }
+    .grid-wrapper { display:inline-block; }
+    .labels-row, .grid-row { display:flex; }
+    .label-cell { width:var(--cell); height:var(--cell); display:flex; align-items:center; justify-content:center; font-size:12px; opacity:.7; }
+    .grid { display:grid; grid-template-columns: repeat(var(--n), var(--cell)); gap:var(--gap); background:#233041; padding:var(--gap); border-radius:8px; }
+    .cell { width:var(--cell); height:var(--cell); display:grid; place-items:center; background:#0f1720; border-radius:4px; }
+    .cell input { width:100%; height:100%; text-align:center; font-weight:700; font-size:16px; text-transform:uppercase; background:transparent; border:none; color:#e6edf3; outline:none; }
     .cell.black { background:#0b0e14; }
-    .cell.black input { visibility: hidden; }
-    .toolbar { display:flex; gap:10px; margin:12px 0; align-items:center; flex-wrap:wrap; }
-    .pill { padding:6px 10px; border:1px solid #233041; border-radius:999px; font-size:12px; opacity:.9 }
-    .small { font-size:12px; opacity:.7 }
-    .who { display:flex; gap:6px; flex-wrap:wrap }
-    .dot { width:10px; height:10px; border-radius:50%; background:#5eead4 }
-    footer { margin-top:12px; opacity:.7; font-size:12px }
-    .kbd { background:#10161f; border:1px solid #233041; padding:2px 6px; border-radius:6px; font-size: 12px }
-    .notice { background:#0f1a29; border:1px solid #24344a; padding:10px; border-radius:10px; margin-bottom:12px }
+    .cell.black input { visibility:hidden; }
   </style>
 </head>
 <body>
 <div class="app">
-  <header>
-    <h1>Yhteinen sanaristikko</h1>
-    <div class="row small">Huone: <span id="roomLabel">–</span> • Suojaus: <span id="lockLabel">avoin</span></div>
-  </header>
-
-  <div class="notice small">Jaa tämä sivu kavereille. Kaikki, joilla on sama <b>huoneen tunnus</b> (URL-parametrissa <code>?room=</code>) ja mahdollinen <b>salasana</b>, voivat muokata ruudukkoa reaaliajassa.</div>
-
-  <div class="toolbar">
-    <label>Koko: <input id="size" type="number" min="3" max="25" value="15"></label>
-    <button id="resize">Luo uusi ruudukko</button>
-    <button id="toggleBlack">Vaihda mustaa (pidä <span class="kbd">Alt</span>)</button>
-    <button id="clear">Tyhjennä</button>
-    <span class="pill">Osallistujat: <span id="peers">1</span></span>
-  </div>
-
-  <div id="grid" class="grid" role="grid" aria-label="Sanaristikko"></div>
-
-  <footer>
-    Vinkit: Klikkaa solua ja kirjoita kirjain. Pidä <span class="kbd">Alt</span> pohjassa ja klikkaa solua vaihtaaksesi mustan/valkoisen. Kirjaimet synkkaantuvat kaikille.
-  </footer>
+  <h1 id="title">Yhteinen sanaristikko</h1>
+  <div id="gridWrapper" class="grid-wrapper"></div>
 </div>
 
-<!-- Yjs ja WebSocket-provider (julkinen demo) -->
 <script src="https://unpkg.com/yjs@13.6.18/dist/yjs.js"></script>
 <script src="https://unpkg.com/y-websocket@1.5.4/dist/y-websocket.js"></script>
 <script>
 (function(){
-  // === Huone ja (valinnainen) salasana URL-parametreista ===
   const params = new URLSearchParams(location.search);
-  const room = (params.get('room') || 'demo-room').replace(/[^a-z0-9-_]/gi, '').toLowerCase();
-  const pass = params.get('pass') || '';
-  document.getElementById('roomLabel').textContent = room;
-  document.getElementById('lockLabel').textContent = pass ? 'salasanoitettu' : 'avoin';
+  const room = (params.get('room')||'POP1').toLowerCase();
+  document.getElementById('title').textContent = 'Sanaristikko '+room.toUpperCase();
 
-  // === Yjs – jaettu tila ===
   const ydoc = new Y.Doc();
-  // Salaus: tehdään yksinkertainen avain XOR (HUOM: vain kevyt esto julkisessa demossa)
-  const key = pass ? new TextEncoder().encode(pass) : null;
-  function enc(str){ if(!key) return str; const a=new TextEncoder().encode(str); for(let i=0;i<a.length;i++){ a[i]^=key[i%key.length]; } return btoa(String.fromCharCode(...a)); }
-  function dec(str){ if(!key) return str; const a=Uint8Array.from(atob(str), c=>c.charCodeAt(0)); for(let i=0;i<a.length;i++){ a[i]^=key[i%key.length]; } return new TextDecoder().decode(a); }
-
-  // Y-websocket – käytetään julkista demopalvelinta. Tuotannossa asenna oma palvelin.
   const provider = new window.ywebsocket.WebsocketProvider('wss://demos.yjs.dev', 'crossword-'+room, ydoc);
-  const ystate = ydoc.getMap('state');       // koko, jne.
-  const ycells = ydoc.getMap('cells');       // solut: key="r,c" -> { v: kirjain, b: musta }
+  const ycells = ydoc.getMap('cells');
 
-  // Osallistujalaskuri
-  const peersEl = document.getElementById('peers');
-  function updatePeers(){ const awareness = provider.awareness.getStates(); peersEl.textContent = awareness.size; }
-  provider.awareness.on('change', updatePeers); provider.on('status', updatePeers);
+  const N = 20;
+  const gridWrapper = document.getElementById('gridWrapper');
 
-  // Alustetaan koko
-  const sizeInput = document.getElementById('size');
-  if(!ystate.get('n')) ystate.set('n', 15);
-  sizeInput.value = ystate.get('n');
-
-  const gridEl = document.getElementById('grid');
   function keyFor(r,c){ return r+','+c; }
-  function getCell(r,c){ const raw = ycells.get(keyFor(r,c)); return raw ? JSON.parse(dec(raw)) : { v:'', b:false }; }
-  function setCell(r,c,obj){ ycells.set(keyFor(r,c), enc(JSON.stringify(obj))); }
+  function getCell(r,c){ const raw = ycells.get(keyFor(r,c)); return raw?JSON.parse(raw):{ v:'', b:false }; }
+  function setCell(r,c,obj){ ycells.set(keyFor(r,c), JSON.stringify(obj)); }
 
   function render(){
-    const n = Number(ystate.get('n')) || 15; 
-    gridEl.style.setProperty('--n', n);
-    gridEl.innerHTML = '';
-    for(let r=0;r<n;r++){
-      for(let c=0;c<n;c++){
-        const data = getCell(r,c);
-        const cell = document.createElement('div');
-        cell.className = 'cell' + (data.b?' black':'');
-        cell.dataset.r=r; cell.dataset.c=c;
-        const inp = document.createElement('input');
-        inp.maxLength = 1; inp.value = (data.v||'').toUpperCase();
+    gridWrapper.innerHTML='';
+    // yläkirjaimet
+    const topRow=document.createElement('div');
+    topRow.className='labels-row';
+    topRow.appendChild(document.createElement('div')).className='label-cell';
+    for(let c=0;c<N;c++){ const l=document.createElement('div'); l.className='label-cell'; l.textContent=String.fromCharCode(65+c); topRow.appendChild(l); }
+    topRow.appendChild(document.createElement('div')).className='label-cell';
+    gridWrapper.appendChild(topRow);
+
+    for(let r=0;r<N;r++){
+      const row=document.createElement('div'); row.className='grid-row';
+      const left=document.createElement('div'); left.className='label-cell'; left.textContent=r+1; row.appendChild(left);
+      const grid=document.createElement('div'); grid.className='grid'; grid.style.setProperty('--n',N);
+      for(let c=0;c<N;c++){
+        const data=getCell(r,c);
+        const cell=document.createElement('div');
+        cell.className='cell'+(data.b?' black':'');
+        const inp=document.createElement('input');
+        inp.maxLength=1; inp.value=(data.v||'').toUpperCase();
         inp.addEventListener('input', e=>{
-          const v = (e.target.value||'').replace(/[^a-zA-ZÅÄÖåäö]/g,'').toUpperCase().slice(0,1);
-          e.target.value = v; setCell(r,c,{ v, b:data.b });
+          const v=(e.target.value||'').replace(/[^A-Za-zÅÄÖåäö]/g,'').toUpperCase().slice(0,1);
+          e.target.value=v; setCell(r,c,{v,b:data.b});
         });
         cell.appendChild(inp);
-        cell.addEventListener('click', e=>{
-          if(e.altKey){ setCell(r,c,{ v:data.v, b:!data.b }); }
-        });
-        gridEl.appendChild(cell);
+        cell.addEventListener('click', e=>{ if(e.altKey){ setCell(r,c,{v:data.v,b:!data.b}); }});
+        grid.appendChild(cell);
       }
+      row.appendChild(grid);
+      const right=document.createElement('div'); right.className='label-cell'; right.textContent=r+1; row.appendChild(right);
+      gridWrapper.appendChild(row);
     }
+    // alarivi kirjaimet
+    const bottomRow=document.createElement('div'); bottomRow.className='labels-row';
+    bottomRow.appendChild(document.createElement('div')).className='label-cell';
+    for(let c=0;c<N;c++){ const l=document.createElement('div'); l.className='label-cell'; l.textContent=String.fromCharCode(65+c); bottomRow.appendChild(l); }
+    bottomRow.appendChild(document.createElement('div')).className='label-cell';
+    gridWrapper.appendChild(bottomRow);
   }
 
-  // Kuunnellaan jaettuja muutoksia
-  ycells.observe(()=> render());
-  ystate.observe(()=> render());
-
-  // Nappulat
-  document.getElementById('resize').addEventListener('click', ()=>{
-    const n = Math.max(3, Math.min(25, Number(sizeInput.value)||15));
-    ystate.set('n', n);
-    // tyhjennetään solut kun koko muuttuu
-    ydoc.transact(()=>{ ycells.clear(); });
-  });
-
-  document.getElementById('toggleBlack').addEventListener('click', ()=>{
-    // helpoksi: seuraava klikkaus Altilla muuttaa väriä; tässä ei tarvita koodia
-    alert('Pidä Alt pohjassa ja klikkaa solua muuttaaksesi mustaksi/valkoiseksi.');
-  });
-
-  document.getElementById('clear').addEventListener('click', ()=>{
-    if(confirm('Tyhjennetäänkö kaikki kirjaimet?')) ycells.clear();
-  });
-
-  // Ensirender
+  ycells.observe(render);
   render();
 })();
 </script>
