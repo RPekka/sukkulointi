@@ -148,21 +148,42 @@ async function loadModule(urls){
     // Paikallispysyvyys
     if(IndexeddbPersistence){ try { new IndexeddbPersistence('crossword-'+room.toLowerCase(), ydoc); } catch{} }
 
-    // Synkka: WS → (fallback 4s) → WebRTC
+    // Synkka: WS → (fallback nopea) → WebRTC
     let connected = false;
+    async function startWebRTC(label='Kokeillaan WebRTC:tä…'){
+      if(!WebrtcProvider) return;
+      setStatus('', label);
+      try{
+        const rtc = new WebrtcProvider('crossword-'+room.toLowerCase(), ydoc, {
+          signaling: [
+            'wss://signaling.yjs.dev',
+            'wss://y-webrtc-signaling-eu.herokuapp.com',
+            'wss://y-webrtc-signaling-us.herokuapp.com'
+          ],
+          peerOpts: { config: { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] } }
+        });
+        rtc.on('synced', (isSynced)=>{ if(isSynced){ connected=true; setStatus('ok','Yhdistetty (WebRTC) – muutokset synkassa'); } });
+        rtc.on('peers', ({added, removed})=>{
+          // Näytä valmis-tila myös ilman toista peeria
+          if(!connected){ setStatus('ok','WebRTC käytössä – odottaa toista pelaajaa'); }
+        });
+      } catch{ setStatus('err','WebRTC ei auennut – jatketaan paikallisesti'); }
+    }
+
     if(forceTransport !== 'webrtc'){
       try{
         const ws = new WebsocketProvider('wss://demos.yjs.dev', 'crossword-'+room.toLowerCase(), ydoc);
-        ws.on('status', (e)=>{ if(e.status==='connected'){ connected=true; setStatus('ok','Yhdistetty (WebSocket) – muutokset synkassa'); } else if(!connected){ setStatus('', 'Yritetään WS-yhteyttä…'); } });
-        ws.on('connection-error', ()=>{ if(!connected) setStatus('err','WS-yhteysvirhe – kokeillaan WebRTC:tä'); });
-      } catch{}
-    }
-    if(forceTransport==='webrtc' || !connected){
-      setTimeout(()=>{
-        if(connected || !WebrtcProvider) return;
-        try{ new WebrtcProvider('crossword-'+room.toLowerCase(), ydoc, { signaling:['wss://signaling.yjs.dev'], peerOpts:{ config:{ iceServers:[{ urls:'stun:stun.l.google.com:19302' }] } } }); setStatus('ok','Yhdistetty (WebRTC) – muutokset synkassa'); }
-        catch{ setStatus('err','WebRTC ei auennut – jatketaan paikallisesti'); }
-      }, 4000);
+        ws.on('status', (e)=>{
+          if(e.status==='connected'){
+            connected=true; setStatus('ok','Yhdistetty (WebSocket) – muutokset synkassa');
+          } else if(!connected){ setStatus('', 'Yritetään WS-yhteyttä…'); }
+        });
+        ws.on('connection-error', ()=>{ if(!connected) startWebRTC('WS-yhteysvirhe – siirrytään WebRTC:hen…'); });
+        // Jos 3s päästä ei vielä connected → kokeile WebRTC:tä rinnalle
+        setTimeout(()=>{ if(!connected) startWebRTC(); }, 3000);
+      } catch{ startWebRTC('WS ei käynnistynyt – kokeillaan WebRTC:tä…'); }
+    } else {
+      await startWebRTC();
     }
 
     const ycells = ydoc.getMap('cells');
