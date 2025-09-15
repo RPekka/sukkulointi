@@ -14,6 +14,11 @@
     h1 { font-size:22px; margin:0 0 6px 0; font-weight:700; }
     .subhint { font-size:14px; color:#334155; background:#e7eef9; border:1px solid #c9d9f8; padding:8px 10px; border-radius:10px; margin:6px 0 12px; }
 
+    .status { font-size:12px; color:#475569; display:flex; align-items:center; gap:8px; margin-bottom:8px; }
+    .dot { width:8px; height:8px; border-radius:50%; background:#94a3b8; }
+    .dot.ok { background:#16a34a; }
+    .dot.err { background:#ef4444; }
+
     .grid-wrapper { display:inline-block; background:#e5e7eb; padding:8px; border-radius:12px; border:1px solid #d1d5db; }
     .labels-row, .grid-row { display:flex; }
     .label-cell { width:var(--cell); height:var(--cell); display:flex; align-items:center; justify-content:center; font-size:12px; color:#425466; }
@@ -44,6 +49,8 @@
     <h1 id="title">Sanaristikko</h1>
     <div class="subhint">Klikkaa ruutua ja lisää kirjain. Ristikon huone on nettiosoitteen lopussa, Pekka lähettää linkin.</div>
 
+    <div class="status"><span id="statusDot" class="dot"></span><span id="statusText">Yhteyttä muodostetaan…</span></div>
+
     <div id="gridWrapper" class="grid-wrapper"></div>
 
     <div class="toolbar" id="toolbar">
@@ -64,7 +71,7 @@
   <div class="right">
     <div class="card" style="margin-bottom:12px;">
       <div class="toggle"><input type="checkbox" id="lockBlack"> <label for="lockBlack">Lukitse mustat ruudut</label></div>
-      <div style="font-size:12px;color:#475569;margin-top:6px;">Kun huone on uusi, mustat ovat lukittuna oletuksena. Voit avata/lukita tämän kaikkien kanssa jaettuna.</div>
+      <div style="font-size:12px;color:#475569;margin-top:6px;">Uudessa huoneessa mustat ovat lukossa oletuksena. Avaa/lukitse tarvittaessa.</div>
     </div>
     <div class="card">
       <div style="font-weight:600; margin-bottom:8px;">Pelaajat</div>
@@ -76,6 +83,7 @@
 <script type="module">
 import * as Y from 'https://cdn.jsdelivr.net/npm/yjs@13.6.18/+esm';
 import { WebsocketProvider } from 'https://cdn.jsdelivr.net/npm/y-websocket@1.5.4/+esm';
+import { IndexeddbPersistence } from 'https://cdn.jsdelivr.net/npm/y-indexeddb@1.0.10/+esm';
 
 (function(){
   const params = new URLSearchParams(location.search);
@@ -83,9 +91,25 @@ import { WebsocketProvider } from 'https://cdn.jsdelivr.net/npm/y-websocket@1.5.
   const extraTitle = (params.get('title')||'').trim();
   updateHeader(room, extraTitle);
 
-  // Yjs init
+  // Yjs init + paikallinen pysyvyys + websocket-sync
   const ydoc = new Y.Doc();
-  try { new WebsocketProvider('wss://demos.yjs.dev', 'crossword-'+room.toLowerCase(), ydoc); } catch(e) { console.warn('Realtime-yhteyttä ei saatu:', e); }
+  const persist = new IndexeddbPersistence('crossword-'+room.toLowerCase(), ydoc);
+  const statusDot = document.getElementById('statusDot');
+  const statusText = document.getElementById('statusText');
+
+  let provider = null;
+  try {
+    provider = new WebsocketProvider('wss://demos.yjs.dev', 'crossword-'+room.toLowerCase(), ydoc);
+    provider.on('status', (e)=>{
+      if(e.status === 'connected'){ statusDot.classList.add('ok'); statusDot.classList.remove('err'); statusText.textContent='Yhdistetty – muutokset synkassa'; }
+      else { statusDot.classList.remove('ok'); statusText.textContent='Ei yhteyttä – tallennetaan paikallisesti'; }
+    });
+    provider.on('connection-error', ()=>{ statusDot.classList.add('err'); statusText.textContent='Yhteysvirhe – jatketaan paikallisesti'; });
+  } catch(e) {
+    statusDot.classList.add('err'); statusText.textContent='Yhteys epäonnistui – paikallinen tila käytössä';
+    console.warn('Realtime-yhteyttä ei saatu:', e);
+  }
+
   const ycells = ydoc.getMap('cells');
   const ystate = ydoc.getMap('state');
   const ynames = ydoc.getMap('names');
@@ -96,8 +120,10 @@ import { WebsocketProvider } from 'https://cdn.jsdelivr.net/npm/y-websocket@1.5.
   const namesEl = document.getElementById('names');
 
   // Jos uusi huone (ei soluja) ja asetusta ei vielä ole, lukitse mustat oletuksena
-  if(ycells.size === 0 && !ystate.has('lockBlack')) ystate.set('lockBlack', true);
-  lockBlackEl.checked = !!ystate.get('lockBlack');
+  persist.whenSynced.then(()=>{
+    if(ycells.size === 0 && !ystate.has('lockBlack')) ystate.set('lockBlack', true);
+    lockBlackEl.checked = !!ystate.get('lockBlack');
+  });
 
   function keyFor(r,c){ return r+','+c; }
   function getCell(r,c){ const raw = ycells.get(keyFor(r,c)); return raw?JSON.parse(raw):{ v:'', b:false }; }
@@ -148,9 +174,7 @@ import { WebsocketProvider } from 'https://cdn.jsdelivr.net/npm/y-websocket@1.5.
           }
         });
         cell.appendChild(inp);
-        cell.addEventListener('click', e=>{
-          if(e.altKey && !ystate.get('lockBlack')){ setCell(r,c,{v:data.v,b:!data.b}); }
-        });
+        cell.addEventListener('click', e=>{ if(e.altKey && !ystate.get('lockBlack')){ setCell(r,c,{v:data.v,b:!data.b}); }});
         grid.appendChild(cell);
       }
       row.appendChild(grid);
@@ -219,23 +243,26 @@ import { WebsocketProvider } from 'https://cdn.jsdelivr.net/npm/y-websocket@1.5.
     roomLink.textContent = 'Avaa huone: '+name+(extra? ' — '+extra : '');
   });
 
-  function updateHeader(roomName, extra){
-    const t = document.getElementById('title');
-    t.textContent = 'Sanaristikko '+roomName.toUpperCase()+ (extra? ' — '+extra : '');
-  }
-
-  // Pelaajanimet (10 kenttää, synkattu)
-  function renderNames(){
+  // Pelaajanimet (10 kenttää, synkattu) – rakennetaan kerran, ei uudelleenrenderöintiä joka näppäyksellä
+  const nameInputs = [];
+  function buildNames(){
     namesEl.innerHTML='';
     for(let i=0;i<10;i++){
       const inp=document.createElement('input');
       inp.placeholder = 'Pelaaja '+(i+1);
       inp.value = ynames.get(String(i)) || '';
-      inp.addEventListener('input', ()=> ynames.set(String(i), inp.value));
-      namesEl.appendChild(inp);
+      inp.addEventListener('input', ()=>{ ynames.set(String(i), inp.value); });
+      nameInputs.push(inp); namesEl.appendChild(inp);
     }
   }
-  ynames.observe(renderNames); renderNames();
+  function syncNamesFromDoc(){
+    for(let i=0;i<nameInputs.length;i++){
+      const v = ynames.get(String(i)) || '';
+      if(nameInputs[i].value !== v){ nameInputs[i].value = v; }
+    }
+  }
+  ynames.observe(syncNamesFromDoc);
+  buildNames();
 })();
 </script>
 </body>
