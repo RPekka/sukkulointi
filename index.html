@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Yhteinen sanaristikko (reaaliaikainen)</title>
+  <title>Yhteinen sanaristikko (pilvisynkka)</title>
   <style>
     :root { --cell: 34px; --gap: 2px; font-family: system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, Arial, sans-serif; }
     body { margin:0; background:#f4f6fa; color:#0b1116; }
@@ -38,7 +38,7 @@
 
     .card { background:#ffffff; border:1px solid #cbd5e1; border-radius:12px; padding:12px; box-shadow:0 2px 10px #00000010; }
     .names { display:grid; grid-template-columns: 1fr; gap:8px; }
-    .names input { width:100%; padding:10px; border:1px solid #cbd5e1; border-radius:10px; }
+    .names input, .names select { width:100%; padding:10px; border:1px solid #cbd5e1; border-radius:10px; }
     .toggle { display:flex; align-items:center; gap:8px; font-size:14px; }
     .muted { color:#64748b; font-size:12px; }
 
@@ -79,6 +79,7 @@
     <div class="card" style="margin-bottom:12px;">
       <div style="font-weight:600; margin-bottom:8px;">Pelaa Firebase-pilvessä</div>
       <div class="names" style="gap:10px;">
+        <input id="cloudTitle" type="text" placeholder="Huoneen otsikko (näkyy sivun yläreunassa)" />
         <select id="playerSelect">
           <option value="">— Valitse nimimerkki —</option>
           <option>Enni</option>
@@ -100,7 +101,7 @@
           <button id="releaseTurn" disabled>Luovuta vuoro</button>
           <button id="cloudSave" disabled>Tallenna pilveen</button>
         </div>
-        <div class="muted">Linkki toimii muodossa: <code>?mode=firebase&db=...&room=POP1</code>. Vuoro näkyy muille lähes heti.</div>
+        <div class="muted">Linkki: <code>?mode=firebase&db=...&room=POP1</code>. Otsikko tallentuu pilveen ja näkyy kaikille.</div>
       </div>
     </div>
 
@@ -112,18 +113,18 @@
 </div>
 
 <script type="module">
-// ——— Yleiset apurit ———
+// ——— Parametrit ———
 const params = new URLSearchParams(location.search);
 const mode = (params.get('mode')||'offline').toLowerCase();
 const room = (params.get('room')||'POP1').trim();
-const extraTitle = (params.get('title')||'').trim();
+const extraTitleParam = (params.get('title')||'').trim();
 const dbURL = (params.get('db')||'').replace(/\/$/, '');
 
-function updateHeader(roomName, extra){
-  const t = document.getElementById('title');
-  t.textContent = 'Sanaristikko '+roomName.toUpperCase()+ (extra? ' — '+extra : '');
+const titleEl = document.getElementById('title');
+function setHeader(roomName, extra){
+  titleEl.textContent = 'Sanaristikko '+roomName.toUpperCase()+ (extra? ' — '+extra : '');
 }
-updateHeader(room, extraTitle);
+setHeader(room, extraTitleParam);
 
 const statusDot = document.getElementById('statusDot');
 const statusText = document.getElementById('statusText');
@@ -136,32 +137,23 @@ const N = 20;
 const gridWrapper = document.getElementById('gridWrapper');
 const lockBlackEl = document.getElementById('lockBlack');
 const namesEl = document.getElementById('names');
+const cloudTitleEl = document.getElementById('cloudTitle');
 
 function keyFor(r,c){ return r+','+c; }
 
-// Paikallinen tilakontti (toimii sekä offline että firebase -tilassa)
+// Paikallinen tilakontti
 const Store = {
-  cells: {}, // "r,c": {v,b}
+  cells: {},
   state: { lockBlack: true },
-  names: {}, // index -> string
+  names: {},
   active: null, // { name, since }
   myName: '',
+  meta: { title: '' },
   updatedAt: 0,
 };
 
-// ——— UI render ———
 function canEdit(){ return !Store.active || Store.active?.name === Store.myName; }
-function applyEditability(){
-  const cls = 'disabled-overlay';
-  const grid = gridWrapper.querySelector('.grid');
-  if(!grid) return;
-  const host = grid.parentElement?.parentElement; // .grid inside row
-  if(canEdit()){
-    gridWrapper.classList.remove(cls);
-  } else {
-    gridWrapper.classList.add(cls);
-  }
-}
+function applyEditability(){ gridWrapper.classList.toggle('disabled-overlay', !canEdit()); }
 
 function render(){
   gridWrapper.innerHTML='';
@@ -180,7 +172,7 @@ function render(){
       const inp=document.createElement('input');
       inp.maxLength=1; inp.value=(data.v||'').toUpperCase(); inp.dataset.r=r; inp.dataset.c=c;
       inp.addEventListener('input', e=>{
-        if(!canEdit()) return; // ei muokata ilman vuoroa
+        if(!canEdit()) return;
         const v=(e.target.value||'').replace(/[^A-Za-zÅÄÖåäö]/g,'').toUpperCase().slice(0,1);
         e.target.value=v; Store.cells[keyFor(r,c)] = { v, b:data.b }; if(v){ move(r,c,'right'); }
       });
@@ -214,7 +206,6 @@ function render(){
 function focusRC(r,c){ const el = document.querySelector(`.cell input[data-r="${r}"][data-c="${c}"]`); if(el){ el.focus(); el.select(); } }
 function move(r,c,dir){ if(dir==='left') c=Math.max(0,c-1); if(dir==='right') c=Math.min(N-1,c+1); if(dir==='up') r=Math.max(0,r-1); if(dir==='down') r=Math.min(N-1,r+1); focusRC(r,c); }
 
-// Nimilista (10 kenttää, kuten aiemmin)
 function buildNames(){
   namesEl.innerHTML='';
   for(let i=0;i<10;i++){
@@ -241,16 +232,19 @@ const cloud = {
     if(!res.ok) throw new Error('Pilvilataus epäonnistui');
     const data = await res.json();
     if(!data){ return; }
-    Store.cells = data.cells||{}; Store.state = data.state||{lockBlack:true}; Store.names = data.names||{}; Store.active = data.active||null; Store.updatedAt = data.updatedAt||0;
+    Store.cells = data.cells||{}; Store.state = data.state||{lockBlack:true}; Store.names = data.names||{}; Store.active = data.active||null; Store.updatedAt = data.updatedAt||0; Store.meta = data.meta||{title:''};
+    cloudTitleEl.value = Store.meta.title || '';
+    setHeader(room, Store.meta.title || extraTitleParam);
     setActiveInfo(Store.active? `Vuoro: ${Store.active.name}` : 'Ei lukkoa');
     render();
   },
   async save(){
-    // tallennus sallitaan vain jos ei lukkoa tai lukko on omalla nimellä
     if(Store.active && Store.active.name !== Store.myName){ alert(`Et ole vuorossa (vuoro: ${Store.active.name}).`); return; }
-    const payload = { cells:Store.cells, state:Store.state, names:Store.names, active:Store.active, updatedAt: Date.now() };
+    Store.meta.title = cloudTitleEl.value.trim();
+    const payload = { cells:Store.cells, state:Store.state, names:Store.names, active:Store.active, meta:Store.meta, updatedAt: Date.now() };
     const res = await fetch(this.pathRoom(), { method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) });
     if(!res.ok) throw new Error('Pilvitallennus epäonnistui');
+    setHeader(room, Store.meta.title || extraTitleParam);
   },
   pollHandle:null,
   startPoll(){
@@ -260,10 +254,12 @@ const cloud = {
         const res = await fetch(this.pathRoom()); if(!res.ok) return;
         const data = await res.json(); if(!data) return;
         if(data.updatedAt && data.updatedAt !== Store.updatedAt){
-          Store.cells = data.cells||{}; Store.state = data.state||{lockBlack:true}; Store.names = data.names||{}; Store.active = data.active||null; Store.updatedAt = data.updatedAt; render();
-        } else { // päivitä vähintään vuoroinfo
-          Store.active = data.active||null;
+          Store.cells = data.cells||{}; Store.state = data.state||{lockBlack:true}; Store.names = data.names||{}; Store.active = data.active||null; Store.meta = data.meta||{title:''}; Store.updatedAt = data.updatedAt; render();
+        } else {
+          Store.active = data.active||null; Store.meta = data.meta||{title: Store.meta.title||''};
         }
+        cloudTitleEl.value = Store.meta.title || '';
+        setHeader(room, Store.meta.title || extraTitleParam);
         setActiveInfo(Store.active? `Vuoro: ${Store.active.name}` : 'Ei lukkoa');
         applyEditability();
       } catch{}
@@ -282,12 +278,13 @@ const autoReleaseEl = document.getElementById('autoRelease');
 playerSelect.addEventListener('change', ()=>{
   Store.myName = playerSelect.value || '';
   takeTurnBtn.disabled = !Store.myName || !cloud.enabled;
-  cloudSaveBtn.disabled = !cloud.enabled; // sallitaan tallennus myöhemmin lukolla
+  cloudSaveBtn.disabled = !cloud.enabled; // tallennus sallitaan kun pilvi käytössä
 });
 
 lockBlackEl.addEventListener('change', ()=>{ Store.state.lockBlack = !!lockBlackEl.checked; applyEditability(); });
 
-document.getElementById('save').addEventListener('click', ()=>{
+// Paikallinen Tallenna/Lataa
+ document.getElementById('save').addEventListener('click', ()=>{
   const out = { n:N, cells:Store.cells };
   const blob = new Blob([JSON.stringify(out)], {type:'application/json'});
   const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=`ristikko-${room}.json`; a.click(); URL.revokeObjectURL(a.href);
@@ -305,13 +302,12 @@ cloudLoadBtn.addEventListener('click', async ()=>{
 });
 
 async function writeActive(to){
-  // kirjoita pilveen heti tieto vuoron ottajasta/luovutuksesta
   try{
     const res = await fetch(cloud.pathRoom()); const data = res.ok? await res.json() : null;
-    const base = data||{cells:{},state:{lockBlack:true},names:{}};
-    base.active = to; base.updatedAt = Date.now();
+    const base = data||{cells:{},state:{lockBlack:true},names:{},meta:{title: cloudTitleEl.value.trim()||''}};
+    base.active = to; base.updatedAt = Date.now(); base.meta.title = cloudTitleEl.value.trim()||base.meta.title||'';
     await fetch(cloud.pathRoom(), { method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(base) });
-    Store.active = to; Store.updatedAt = base.updatedAt; setActiveInfo(Store.active? `Vuoro: ${Store.active.name}` : 'Ei lukkoa'); applyEditability();
+    Store.active = to; Store.updatedAt = base.updatedAt; Store.meta = base.meta; setHeader(room, Store.meta.title || extraTitleParam); setActiveInfo(Store.active? `Vuoro: ${Store.active.name}` : 'Ei lukkoa'); applyEditability();
   } catch (e){ alert('Vuoron kirjaus epäonnistui'); }
 }
 
@@ -319,7 +315,7 @@ takeTurnBtn.addEventListener('click', async ()=>{
   if(!Store.myName){ alert('Valitse nimimerkki ensin'); return; }
   if(!cloud.enabled){ alert('Pilvimoodi ei ole käytössä'); return; }
   await writeActive({ name: Store.myName, since: Date.now() });
-  takeTurnBtn.disabled=true; releaseTurnBtn.disabled=false; cloudSaveBtn.disabled=false; // sallitaan tallennus
+  takeTurnBtn.disabled=true; releaseTurnBtn.disabled=false; cloudSaveBtn.disabled=false;
 });
 
 releaseTurnBtn.addEventListener('click', async ()=>{
@@ -334,13 +330,8 @@ cloudSaveBtn.addEventListener('click', async ()=>{
   catch(e){ alert('Tallennus pilveen epäonnistui'); }
 });
 
-// Nimipaneeli oikealle
-function initNamesPanel(){
-  if(Object.keys(Store.names).length===0){
-    // esitäyttö tyhjäksi (pelaajat kirjoittavat itse) – rosteri on dropdownissa
-  }
-  buildNames();
-}
+// Nimipaneeli
+function initNamesPanel(){ buildNames(); }
 
 // Init
 lsLoad();
