@@ -25,16 +25,23 @@
   <div id="gridWrapper" class="grid-wrapper"></div>
 </div>
 
-<script src="https://unpkg.com/yjs@13.6.18/dist/yjs.js"></script>
-<script src="https://unpkg.com/y-websocket@1.5.4/dist/y-websocket.js"></script>
-<script>
+<script type="module">
+// Moduliversio (toimii luotettavasti GitHub Pagesissa)
+import * as Y from 'https://cdn.jsdelivr.net/npm/yjs@13.6.18/+esm';
+import { WebsocketProvider } from 'https://cdn.jsdelivr.net/npm/y-websocket@1.5.4/+esm';
+
 (function(){
   const params = new URLSearchParams(location.search);
   const room = (params.get('room')||'POP1').toLowerCase();
   document.getElementById('title').textContent = 'Sanaristikko '+room.toUpperCase();
 
   const ydoc = new Y.Doc();
-  const provider = new window.ywebsocket.WebsocketProvider('wss://demos.yjs.dev', 'crossword-'+room, ydoc);
+  let provider = null;
+  try {
+    provider = new WebsocketProvider('wss://demos.yjs.dev', 'crossword-'+room, ydoc);
+  } catch (e) {
+    console.warn('Realtime-yhteyttä ei saatu, jatketaan paikallisesti', e);
+  }
   const ycells = ydoc.getMap('cells');
 
   const N = 20;
@@ -46,7 +53,6 @@
 
   function render(){
     gridWrapper.innerHTML='';
-    // yläkirjaimet
     const topRow=document.createElement('div');
     topRow.className='labels-row';
     topRow.appendChild(document.createElement('div')).className='label-cell';
@@ -76,7 +82,6 @@
       const right=document.createElement('div'); right.className='label-cell'; right.textContent=r+1; row.appendChild(right);
       gridWrapper.appendChild(row);
     }
-    // alarivi kirjaimet
     const bottomRow=document.createElement('div'); bottomRow.className='labels-row';
     bottomRow.appendChild(document.createElement('div')).className='label-cell';
     for(let c=0;c<N;c++){ const l=document.createElement('div'); l.className='label-cell'; l.textContent=String.fromCharCode(65+c); bottomRow.appendChild(l); }
