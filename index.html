@@ -8,21 +8,40 @@
     :root { --cell: 32px; --gap: 2px; font-family: system-ui, sans-serif; }
     body { margin:0; background:#0b1116; color:#e6edf3; display:grid; place-items:center; min-height:100dvh; }
     .app { width:min(96vw,1100px); padding:20px; }
-    h1 { font-size:20px; margin:0; font-weight:600; }
+    h1 { font-size:20px; margin:0 0 8px 0; font-weight:600; }
+    .toolbar { display:flex; flex-wrap:wrap; gap:10px; align-items:center; margin:8px 0 12px; }
+    .toolbar button, .toolbar input[type="text"], .toolbar input[type="file"] { background:#0f1720; color:#e6edf3; border:1px solid #233041; border-radius:8px; padding:8px 10px; }
+    .toolbar button:hover { background:#16263a; cursor:pointer; }
     .grid-wrapper { display:inline-block; }
     .labels-row, .grid-row { display:flex; }
-    .label-cell { width:var(--cell); height:var(--cell); display:flex; align-items:center; justify-content:center; font-size:12px; opacity:.7; }
+    .label-cell { width:var(--cell); height:var(--cell); display:flex; align-items:center; justify-content:center; font-size:12px; opacity:.8; }
     .grid { display:grid; grid-template-columns: repeat(var(--n), var(--cell)); gap:var(--gap); background:#233041; padding:var(--gap); border-radius:8px; }
-    .cell { width:var(--cell); height:var(--cell); display:grid; place-items:center; background:#0f1720; border-radius:4px; }
+    .cell { width:var(--cell); height:var(--cell); display:grid; place-items:center; background:#152335; border-radius:4px; position:relative; }
     .cell input { width:100%; height:100%; text-align:center; font-weight:700; font-size:16px; text-transform:uppercase; background:transparent; border:none; color:#e6edf3; outline:none; }
-    .cell.black { background:#0b0e14; }
-    .cell.black input { visibility:hidden; }
+    .cell.black { background:#070a10; outline:1px solid #2a3b52; }
+    .cell.black input { visibility:hidden; pointer-events:none; }
+    .cell.black::after { content:""; position:absolute; inset:0; border-radius:4px; background:repeating-linear-gradient(45deg, #0b0f17 0 8px, #101825 8px 16px); opacity:0.9; }
+    .hint { font-size:12px; opacity:.8; margin-top:8px; }
   </style>
 </head>
 <body>
 <div class="app">
   <h1 id="title">Yhteinen sanaristikko</h1>
+
+  <div class="toolbar">
+    <button id="save">Tallenna (.json)</button>
+    <label>
+      <input id="load" type="file" accept="application/json" style="display:none">
+      <button id="loadBtn" type="button">Lataa (.json)</button>
+    </label>
+    <span style="flex:1"></span>
+    <input id="roomName" type="text" placeholder="Huoneen nimi (esim. POP1)" />
+    <button id="makeLink">Luo linkki</button>
+    <a id="roomLink" href="#" target="_blank" style="text-decoration:underline; color:#8fd3ff; display:none">Avaa huone</a>
+  </div>
+
   <div id="gridWrapper" class="grid-wrapper"></div>
+  <div class="hint">Vinkki: Alt+klikkaa ruutua tehdäksesi siitä mustan/valkoisen. Vaihda huonetta lisäämällä osoitteeseen <code>?room=NIMI</code>.</div>
 </div>
 
 <script type="module">
@@ -91,6 +110,50 @@ import { WebsocketProvider } from 'https://cdn.jsdelivr.net/npm/y-websocket@1.5.
 
   ycells.observe(render);
   render();
+
+  // --- TALLENNA / LATAA (JSON) ---
+  function exportJSON(){
+    const out = { n:N, cells:{} };
+    for(let r=0;r<N;r++) for(let c=0;c<N;c++){
+      const d = getCell(r,c);
+      if(d.v || d.b) out.cells[keyFor(r,c)] = d;
+    }
+    const blob = new Blob([JSON.stringify(out)], {type:'application/json'});
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `ristikko-${room}.json`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  }
+  function importJSON(file){
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const data = JSON.parse(reader.result);
+        if(!data || !data.cells) throw new Error('Virheellinen tiedosto');
+        ydoc.transact(()=>{
+          ycells.clear();
+          for(const k in data.cells){ ycells.set(k, JSON.stringify(data.cells[k])); }
+        });
+      } catch(e){ alert('Lataus epäonnistui: '+e.message); }
+    };
+    reader.readAsText(file);
+  }
+  document.getElementById('save').addEventListener('click', exportJSON);
+  const loadInput = document.getElementById('load');
+  document.getElementById('loadBtn').addEventListener('click', ()=> loadInput.click());
+  loadInput.addEventListener('change', ()=>{ if(loadInput.files[0]) importJSON(loadInput.files[0]); });
+
+  // --- HUONELINKKI ---
+  const roomName = document.getElementById('roomName');
+  const roomLink = document.getElementById('roomLink');
+  document.getElementById('makeLink').addEventListener('click', ()=>{
+    const name = (roomName.value || 'POP1').trim();
+    const url = new URL(location.href);
+    url.searchParams.set('room', name);
+    roomLink.href = url.toString();
+    roomLink.style.display = 'inline';
+  });
 })();
 </script>
 </body>
