@@ -122,7 +122,7 @@ const params = new URLSearchParams(location.search);
 const mode = (params.get('mode')||'offline').toLowerCase();
 const room = (params.get('room')||'POP1').trim();
 const dbURL = (params.get('db')||'').replace(/\/$/, '');
-const N = 22;
+const N = 20;
 document.documentElement.style.setProperty('--n', N);
 
 // Otsikko ja status
