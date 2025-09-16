@@ -3,9 +3,9 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Yhteinen sanaristikko (22x22, pilvisynkka)</title>
+<title>Yhteinen sanaristikko (pilvisynkka)</title>
 <style>
-  :root { --cell: 34px; --gap: 2px; --n: 22; font-family: system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, Arial, sans-serif; }
+  :root { --cell: 34px; --gap: 2px; --n: 20; font-family: system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, Arial, sans-serif; }
   body { margin:0; background:#f4f6fa; color:#0b1116; }
   .wrap { display:grid; grid-template-columns: 1fr 300px; gap:16px; align-items:start; width:min(98vw,1300px); margin:0 auto; padding:20px; }
   .right { position:sticky; top:12px; }
@@ -18,22 +18,21 @@
   .dot.ok { background:#16a34a; }
   .dot.err { background:#ef4444; }
 
-  /* Kehys ympäröi KAIKKI: ylä/alakirjaimet + vasen/oikea numerokolumni + ristikko */
+  /* Kehys ympäröi laudan kokonaan (ylä-/alakentät + sivunumerot + ristikko) */
   .grid-wrapper { display:inline-block; }
   .board { display:inline-block; background:#d1d5db; padding:var(--gap); border:1px solid #d1d5db; border-radius:12px; box-sizing:content-box; }
 
-  /* Laudan sisäinen asettelu: 1 tyhjä solupatsas + N solua + 1 tyhjä solupatsas */
-  .labels-row { display:grid; grid-template-columns: var(--cell) repeat(var(--n), var(--cell)) var(--cell); }
-  .label-cell { width:var(--cell); height:var(--cell); display:flex; align-items:center; justify-content:center; font-size:12px; color:#425466; box-sizing:border-box; }
+  /* Label- ja rivi-ruudukot: sama sarakeväli kuin varsinaisessa ruudukossa → kohdistus osuu */
+  .labels-row { display:grid; grid-template-columns: var(--cell) repeat(var(--n), var(--cell)) var(--cell); column-gap: var(--gap); }
+  .label-cell { width:var(--cell); height:var(--cell); display:flex; align-items:center; justify-content:center; font-size:12px; color:#0b1116; font-weight:600; box-sizing:border-box; }
 
-  .grid-row { display:grid; grid-template-columns: var(--cell) repeat(var(--n), var(--cell)) var(--cell); }
-  .grid { display:grid; grid-template-columns: repeat(var(--n), var(--cell)); gap:var(--gap); background:transparent; padding:0; }
+  .grid-row { display:grid; grid-template-columns: var(--cell) repeat(var(--n), var(--cell)) var(--cell); column-gap: var(--gap); }
+  .grid { display:grid; grid-template-columns: repeat(var(--n), var(--cell)); gap: var(--gap); background:transparent; padding:0; }
 
   .cell { width:var(--cell); height:var(--cell); display:grid; place-items:center; background:#ffffff; border-radius:6px; position:relative; border:1px solid #e5e7eb; }
   .cell input {
     width:100%; height:100%; text-align:center; font-weight:800; font-size:18px; text-transform:uppercase;
     background:transparent; border:none; color:#0b1116; outline:none;
-    autocomplete:off; autocapitalize:off; autocorrect:off; spellcheck:false;
   }
   .cell.black { background:#0f1720; border-color:#0f1720; }
   .cell.black input { visibility:hidden; pointer-events:none; }
@@ -117,15 +116,17 @@
 </div>
 
 <script type="module">
+// ——— Asetukset: vaihda N=20 tai N=22 ———
+const N = 20; // <— muuta tarvittaessa 22
+document.documentElement.style.setProperty('--n', N);
+
 // Parametrit
 const params = new URLSearchParams(location.search);
 const mode = (params.get('mode')||'offline').toLowerCase();
 const room = (params.get('room')||'POP1').trim();
 const dbURL = (params.get('db')||'').replace(/\/$/, '');
-const N = 20;
-document.documentElement.style.setProperty('--n', N);
 
-// Otsikko ja status
+// Otsikko & status
 const titleEl = document.getElementById('title');
 function setHeader(roomName, title){ titleEl.textContent = 'Sanaristikko '+roomName.toUpperCase()+ (title? ' — '+title : ''); }
 const statusDot = document.getElementById('statusDot');
@@ -150,14 +151,15 @@ function render(){
 
   // yläkirjaimet
   const top=document.createElement('div'); top.className='labels-row';
-  top.appendChild(document.createElement('div')).className='label-cell';
+  top.appendChild(document.createElement('div')).className='label-cell'; // vasen tyhjä
   for(let c=0;c<N;c++){ const l=document.createElement('div'); l.className='label-cell'; l.textContent=String.fromCharCode(65+c); top.appendChild(l); }
-  top.appendChild(document.createElement('div')).className='label-cell';
+  top.appendChild(document.createElement('div')).className='label-cell'; // oikea tyhjä
   board.appendChild(top);
 
-  // rivit + oikean reunan numerot
+  // rivit
   for(let r=0;r<N;r++){
     const row=document.createElement('div'); row.className='grid-row';
+
     const left=document.createElement('div'); left.className='label-cell'; left.textContent=r+1; row.appendChild(left);
 
     const grid=document.createElement('div'); grid.className='grid';
@@ -166,7 +168,6 @@ function render(){
       const cell=document.createElement('div'); cell.className='cell'+(data.b?' black':'');
       const inp=document.createElement('input');
       inp.maxLength=1; inp.value=(data.v||'').toUpperCase(); inp.dataset.r=r; inp.dataset.c=c;
-      inp.setAttribute('autocomplete','off'); inp.setAttribute('autocapitalize','off'); inp.setAttribute('autocorrect','off'); inp.setAttribute('spellcheck','false');
       inp.addEventListener('input', e=>{
         if(!canEdit()) return;
         const v=(e.target.value||'').replace(/[^A-Za-zÅÄÖåäö]/g,'').toUpperCase().slice(0,1);
@@ -176,8 +177,8 @@ function render(){
         if(!canEdit() && ['ArrowLeft','ArrowRight','ArrowUp','ArrowDown','Backspace','Enter'].includes(e.key)) { e.preventDefault(); return; }
         if(e.key==='ArrowLeft'){ e.preventDefault(); move(r,c,'left'); }
         else if(e.key==='ArrowRight' || e.key==='Enter'){ e.preventDefault(); move(r,c,'right'); }
-        else if(e.key==='Up' || e.key==='ArrowUp'){ e.preventDefault(); move(r,c,'up'); }
-        else if(e.key==='Down' || e.key==='ArrowDown'){ e.preventDefault(); move(r,c,'down'); }
+        else if(e.key==='ArrowUp'){ e.preventDefault(); move(r,c,'up'); }
+        else if(e.key==='ArrowDown'){ e.preventDefault(); move(r,c,'down'); }
         else if(e.key==='Backspace'){
           if(inp.value){ e.preventDefault(); Store.cells[keyFor(r,c)] = { v:'', b:data.b }; inp.value=''; }
           else { e.preventDefault(); const nc=Math.max(0,c-1); const k=keyFor(r,nc); const prev=Store.cells[k]||{v:'',b:false}; Store.cells[k] = { ...prev, v:'' }; focusRC(r,nc); }
@@ -189,7 +190,8 @@ function render(){
     }
 
     row.appendChild(grid);
-    const right=document.createElement('div'); right.className='label-cell'; right.textContent=r+1; row.appendChild(right); // <-- oikean reunan numerot
+
+    const right=document.createElement('div'); right.className='label-cell'; right.textContent=r+1; row.appendChild(right); // oikean reunan numero
     board.appendChild(row);
   }
 
@@ -206,7 +208,7 @@ function render(){
 function focusRC(r,c){ const el = document.querySelector(`.cell input[data-r="${r}"][data-c="${c}"]`); if(el){ el.focus(); el.select(); } }
 function move(r,c,dir){ if(dir==='left') c=Math.max(0,c-1); if(dir==='right') c=Math.min(N-1,c+1); if(dir==='up') r=Math.max(0,r-1); if(dir==='down') r=Math.min(N-1,r+1); focusRC(r,c); }
 
-// Paikalliset varmuudet (pelaajalista)
+// Vapaa pelaajalista
 function initNamesPanel(){
   namesEl.innerHTML='';
   for(let i=0;i<10;i++){
@@ -218,7 +220,7 @@ function initNamesPanel(){
   }
 }
 
-// Offline varmuuskopiointi
+// Offline varmuus
 const LS_KEY = 'crossword-offline-'+room.toLowerCase();
 function lsLoad(){ try{ const s=localStorage.getItem(LS_KEY); if(s){ const d=JSON.parse(s); Object.assign(Store, d); } } catch{} }
 
@@ -228,14 +230,11 @@ const cloud = {
   base: dbURL,
   pathRoom(){ return `${this.base}/rooms/${encodeURIComponent(room)}.json`; },
   async load(){
-    const res = await fetch(this.pathRoom());
-    if(!res.ok) throw new Error('Pilvilataus epäonnistui');
-    const data = await res.json();
-    if(!data) return;
+    const res = await fetch(this.pathRoom()); if(!res.ok) throw new Error('Pilvilataus epäonnistui');
+    const data = await res.json(); if(!data) return;
     Store.cells = data.cells||{}; Store.state = data.state||{lockBlack:true}; Store.names = data.names||{};
     Store.active = data.active||null; Store.updatedAt = data.updatedAt||0; Store.meta = data.meta||{title:''};
-    setHeader(room, Store.meta.title || ''); setActiveInfoTxt(Store.active? `Vuoro: ${Store.active.name}` : 'Ei lukkoa');
-    render();
+    setHeader(room, Store.meta.title || ''); setActiveInfoTxt(Store.active? `Vuoro: ${Store.active.name}` : 'Ei lukkoa'); render();
   },
   async save(){
     if(Store.active && Store.active.name !== Store.myName){ alert(`Et ole vuorossa (vuoro: ${Store.active.name}).`); return; }
@@ -253,9 +252,7 @@ const cloud = {
         if(data.updatedAt && data.updatedAt !== Store.updatedAt){
           Store.cells = data.cells||{}; Store.state = data.state||{lockBlack:true}; Store.names = data.names||{};
           Store.active = data.active||null; Store.meta = data.meta||{title:''}; Store.updatedAt = data.updatedAt; render();
-        } else {
-          Store.active = data.active||null;
-        }
+        } else { Store.active = data.active||null; }
         setHeader(room, (data.meta && data.meta.title) || Store.meta.title || '');
         setActiveInfoTxt(Store.active? `Vuoro: ${Store.active.name}` : 'Ei lukkoa');
         applyEditability();
@@ -264,7 +261,7 @@ const cloud = {
   },
 };
 
-// Oikea reuna: kontrollit
+// Oikean reunan kontrollit
 const playerSelect = document.getElementById('playerSelect');
 const takeTurnBtn = document.getElementById('takeTurn');
 const releaseTurnBtn = document.getElementById('releaseTurn');
@@ -273,7 +270,7 @@ const cloudSaveBtn = document.getElementById('cloudSave');
 const autoReleaseEl = document.getElementById('autoRelease');
 
 playerSelect.addEventListener('change', ()=>{ Store.myName = playerSelect.value || ''; takeTurnBtn.disabled = !Store.myName || !cloud.enabled; cloudSaveBtn.disabled = !cloud.enabled; });
-lockBlackEl.addEventListener('change', ()=>{ Store.state.lockBlack = !!lockBlackEl.checked; applyEditability(); });
+lockBlackEl.addEventListener('change', ()=>{ Store.state.lockBlack = !!Store.state.lockBlack; applyEditability(); });
 
 cloudLoadBtn.addEventListener('click', async ()=>{
   if(!cloud.enabled){ alert('Ei pilviyhteyttä: lisää URL-parametrit ?mode=firebase&db=...&room=...'); return; }
@@ -302,7 +299,7 @@ cloudSaveBtn.addEventListener('click', async ()=>{ if(!cloud.enabled){ alert('Pi
   try{ await cloud.save(); if(autoReleaseEl.checked){ await writeActive(null); takeTurnBtn.disabled = !Store.myName; releaseTurnBtn.disabled=true; } }
   catch(e){ alert('Tallennus pilveen epäonnistui'); } });
 
-// Paikalliset Tallenna/Lataa (varmuuskopio)
+// Varmuuskopionapit
 document.getElementById('save').addEventListener('click', ()=>{
   const out = { n:N, cells:Store.cells };
   const blob = new Blob([JSON.stringify(out)], {type:'application/json'});
@@ -316,11 +313,11 @@ document.getElementById('clear').addEventListener('click', ()=>{ if(confirm('Tyh
 
 // Init
 (function init(){
-  lsLoad();
+  // lsLoad(); // (voit ottaa käyttöön jos haluat paikallisen muistin)
   lockBlackEl.checked = !!Store.state.lockBlack;
   setHeader(room, '');
   render();
-  initNamesPanel();
+  // initNamesPanel(); // (valinnainen: vapaamuotoinen nimilista)
   applyEditability();
   if(mode==='firebase' && dbURL){ setStatus('', 'Valmis Firebaseen – paina "Lataa pilvestä"'); } else { setStatus('', 'Offline-tila (paikallinen)'); }
 })();
