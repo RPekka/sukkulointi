@@ -1,58 +1,60 @@
 <!doctype html>
 <html lang="fi">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Yhteinen sanaristikko (22x22, pilvisynkka)</title>
-  <style>
-    :root { --cell: 34px; --gap: 2px; --n:22; font-family: system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, Arial, sans-serif; }
-    body { margin:0; background:#f4f6fa; color:#0b1116; }
-    .wrap { display:grid; grid-template-columns: 1fr 300px; gap:16px; align-items:start; width:min(98vw,1300px); margin:0 auto; padding:20px; }
-    .right { position:sticky; top:12px; }
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Yhteinen sanaristikko (22x22, pilvisynkka)</title>
+<style>
+  :root { --cell: 34px; --gap: 2px; --n: 22; font-family: system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, Arial, sans-serif; }
+  body { margin:0; background:#f4f6fa; color:#0b1116; }
+  .wrap { display:grid; grid-template-columns: 1fr 300px; gap:16px; align-items:start; width:min(98vw,1300px); margin:0 auto; padding:20px; }
+  .right { position:sticky; top:12px; }
 
-    h1 { font-size:22px; margin:0 0 6px 0; font-weight:700; }
-    .subhint { font-size:14px; color:#334155; background:#e7eef9; border:1px solid #c9d9f8; padding:8px 10px; border-radius:10px; margin:6px 0 12px; }
+  h1 { font-size:22px; margin:0 0 6px 0; font-weight:700; }
+  .subhint { font-size:14px; color:#334155; background:#e7eef9; border:1px solid #c9d9f8; padding:8px 10px; border-radius:10px; margin:6px 0 12px; }
 
-    .status { font-size:12px; color:#475569; display:flex; align-items:center; gap:8px; margin-bottom:8px; }
-    .dot { width:8px; height:8px; border-radius:50%; background:#94a3b8; }
-    .dot.ok { background:#16a34a; }
-    .dot.err { background:#ef4444; }
+  .status { font-size:12px; color:#475569; display:flex; align-items:center; gap:8px; margin-bottom:8px; }
+  .dot { width:8px; height:8px; border-radius:50%; background:#94a3b8; }
+  .dot.ok { background:#16a34a; }
+  .dot.err { background:#ef4444; }
 
-    /* Kehys joka ympäröi koko laudan (labelit + ristikko) */
-    .grid-wrapper { display:inline-block; }
-    .board {
-      background:#d1d5db; padding:var(--gap); border-radius:12px; border:1px solid #d1d5db;
-    }
+  /* Kehys ympäröi KAIKKI: ylä/alakirjaimet + vasen/oikea numerokolumni + ristikko */
+  .grid-wrapper { display:inline-block; }
+  .board { display:inline-block; background:#d1d5db; padding:var(--gap); border:1px solid #d1d5db; border-radius:12px; box-sizing:content-box; }
 
-    /* Laudan sisäasettelu: vasen tyhjä, 22 saraketta, oikea tyhjä */
-    .labels-row { display:grid; grid-template-columns: var(--cell) repeat(var(--n), var(--cell)) var(--cell); }
-    .label-cell { width:var(--cell); height:var(--cell); display:flex; align-items:center; justify-content:center; font-size:12px; color:#425466; box-sizing:border-box; }
+  /* Laudan sisäinen asettelu: 1 tyhjä solupatsas + N solua + 1 tyhjä solupatsas */
+  .labels-row { display:grid; grid-template-columns: var(--cell) repeat(var(--n), var(--cell)) var(--cell); }
+  .label-cell { width:var(--cell); height:var(--cell); display:flex; align-items:center; justify-content:center; font-size:12px; color:#425466; box-sizing:border-box; }
 
-    .grid-row { display:grid; grid-template-columns: var(--cell) repeat(var(--n), var(--cell)) var(--cell); }
-    .grid { display:grid; grid-template-columns: repeat(var(--n), var(--cell)); gap:var(--gap); background:transparent; padding:0; }
+  .grid-row { display:grid; grid-template-columns: var(--cell) repeat(var(--n), var(--cell)) var(--cell); }
+  .grid { display:grid; grid-template-columns: repeat(var(--n), var(--cell)); gap:var(--gap); background:transparent; padding:0; }
 
-    .cell { width:var(--cell); height:var(--cell); display:grid; place-items:center; background:#ffffff; border-radius:6px; position:relative; border:1px solid #e5e7eb; }
-    .cell input { width:100%; height:100%; text-align:center; font-weight:800; font-size:18px; text-transform:uppercase; background:transparent; border:none; color:#0b1116; outline:none; }
-    .cell.black { background:#0f1720; border-color:#0f1720; }
-    .cell.black input { visibility:hidden; pointer-events:none; }
-    .cell.black::after { content:""; position:absolute; inset:0; border-radius:6px; background:repeating-linear-gradient(45deg, #0f1720 0 8px, #142237 8px 16px); opacity:.9; }
+  .cell { width:var(--cell); height:var(--cell); display:grid; place-items:center; background:#ffffff; border-radius:6px; position:relative; border:1px solid #e5e7eb; }
+  .cell input {
+    width:100%; height:100%; text-align:center; font-weight:800; font-size:18px; text-transform:uppercase;
+    background:transparent; border:none; color:#0b1116; outline:none;
+    autocomplete:off; autocapitalize:off; autocorrect:off; spellcheck:false;
+  }
+  .cell.black { background:#0f1720; border-color:#0f1720; }
+  .cell.black input { visibility:hidden; pointer-events:none; }
+  .cell.black::after { content:""; position:absolute; inset:0; border-radius:6px; background:repeating-linear-gradient(45deg, #0f1720 0 8px, #142237 8px 16px); opacity:.9; }
 
-    .disabled-overlay { pointer-events:none; opacity:.55; filter:grayscale(0.2); }
+  .disabled-overlay { pointer-events:none; opacity:.55; filter:grayscale(0.2); }
 
-    .toolbar { display:flex; flex-wrap:wrap; gap:10px; align-items:center; margin:12px 0 0; }
-    .toolbar button, .toolbar input[type="text"], .toolbar input[type="file"], .toolbar label { background:#ffffff; color:#0b1116; border:1px solid #cbd5e1; border-radius:10px; padding:8px 10px; }
-    .toolbar button:hover { background:#f1f5f9; cursor:pointer; }
-    .toolbar .grow { flex:1; }
-    a.link { color:#0b6bcb; text-decoration:underline; }
+  .toolbar { display:flex; flex-wrap:wrap; gap:10px; align-items:center; margin:12px 0 0; }
+  .toolbar button, .toolbar input[type="text"], .toolbar input[type="file"], .toolbar label { background:#ffffff; color:#0b1116; border:1px solid #cbd5e1; border-radius:10px; padding:8px 10px; }
+  .toolbar button:hover { background:#f1f5f9; cursor:pointer; }
+  .toolbar .grow { flex:1; }
+  a.link { color:#0b6bcb; text-decoration:underline; }
 
-    .card { background:#ffffff; border:1px solid #cbd5e1; border-radius:12px; padding:12px; box-shadow:0 2px 10px #00000010; }
-    .names { display:grid; grid-template-columns: 1fr; gap:8px; }
-    .names input, .names select { width:100%; padding:10px; border:1px solid #cbd5e1; border-radius:10px; }
-    .toggle { display:flex; align-items:center; gap:8px; font-size:14px; }
-    .muted { color:#64748b; font-size:12px; }
+  .card { background:#ffffff; border:1px solid #cbd5e1; border-radius:12px; padding:12px; box-shadow:0 2px 10px #00000010; }
+  .names { display:grid; grid-template-columns: 1fr; gap:8px; }
+  .names input, .names select { width:100%; padding:10px; border:1px solid #cbd5e1; border-radius:10px; }
+  .toggle { display:flex; align-items:center; gap:8px; font-size:14px; }
+  .muted { color:#64748b; font-size:12px; }
 
-    @media (max-width: 980px){ .wrap{ grid-template-columns: 1fr; } .right{ position:static; } }
-  </style>
+  @media (max-width: 980px){ .wrap{ grid-template-columns: 1fr; } .right{ position:static; } }
+</style>
 </head>
 <body>
 <div class="wrap">
@@ -93,17 +95,8 @@
       <div class="names" style="gap:10px;">
         <select id="playerSelect">
           <option value="">— Valitse nimimerkki —</option>
-          <option>Enni</option>
-          <option>Esme</option>
-          <option>Marika</option>
-          <option>Mauri</option>
-          <option>Mirva</option>
-          <option>Pekka</option>
-          <option>Pertti</option>
-          <option>Petri</option>
-          <option>Sini</option>
-          <option>Taru</option>
-          <option>Teemu</option>
+          <option>Enni</option><option>Esme</option><option>Marika</option><option>Mauri</option><option>Mirva</option>
+          <option>Pekka</option><option>Pertti</option><option>Petri</option><option>Sini</option><option>Taru</option><option>Teemu</option>
         </select>
         <div class="toggle"><input type="checkbox" id="autoRelease"> <label for="autoRelease">Luovuta vuoro tallennettaessa</label></div>
         <div style="display:flex; gap:8px; flex-wrap:wrap;">
@@ -112,7 +105,7 @@
           <button id="releaseTurn" disabled>Luovuta vuoro</button>
           <button id="cloudSave" disabled>Tallenna pilveen</button>
         </div>
-        <div class="muted">Uuden pelin luonti alhaalla (Huoneen nimi + Otsikko → Luo linkki). Pelaajat eivät muuta otsikkoa.</div>
+        <div class="muted">Uusi peli alhaalla (Huone + Otsikko → Luo linkki). Pelaajat eivät muuta otsikkoa.</div>
       </div>
     </div>
 
@@ -124,7 +117,7 @@
 </div>
 
 <script type="module">
-// ——— Perusparametrit ———
+// Parametrit
 const params = new URLSearchParams(location.search);
 const mode = (params.get('mode')||'offline').toLowerCase();
 const room = (params.get('room')||'POP1').trim();
@@ -132,37 +125,26 @@ const dbURL = (params.get('db')||'').replace(/\/$/, '');
 const N = 22;
 document.documentElement.style.setProperty('--n', N);
 
+// Otsikko ja status
 const titleEl = document.getElementById('title');
 function setHeader(roomName, title){ titleEl.textContent = 'Sanaristikko '+roomName.toUpperCase()+ (title? ' — '+title : ''); }
-
 const statusDot = document.getElementById('statusDot');
 const statusText = document.getElementById('statusText');
 const activeInfo = document.getElementById('activeInfo');
 function setStatus(cls, msg){ statusDot.classList.remove('ok','err'); if(cls) statusDot.classList.add(cls); statusText.textContent = msg; }
 function setActiveInfoTxt(txt){ activeInfo.textContent = txt? ' — '+txt : ''; }
 
-// ——— Tilat ———
+// Tilat
 const board = document.getElementById('board');
-const gridWrapper = document.getElementById('gridWrapper');
 const lockBlackEl = document.getElementById('lockBlack');
 const namesEl = document.getElementById('names');
-
 function keyFor(r,c){ return r+','+c; }
-
-const Store = {
-  cells: {},
-  state: { lockBlack: true },
-  names: {},
-  active: null, // { name, since }
-  myName: '',
-  meta: { title: '' },
-  updatedAt: 0,
-};
+const Store = { cells:{}, state:{lockBlack:true}, names:{}, active:null, myName:'', meta:{title:''}, updatedAt:0 };
 
 function canEdit(){ return !Store.active || Store.active?.name === Store.myName; }
 function applyEditability(){ board.classList.toggle('disabled-overlay', !canEdit()); }
 
-// ——— Piirto ———
+// Piirto
 function render(){
   board.innerHTML='';
 
@@ -173,7 +155,7 @@ function render(){
   top.appendChild(document.createElement('div')).className='label-cell';
   board.appendChild(top);
 
-  // rivit
+  // rivit + oikean reunan numerot
   for(let r=0;r<N;r++){
     const row=document.createElement('div'); row.className='grid-row';
     const left=document.createElement('div'); left.className='label-cell'; left.textContent=r+1; row.appendChild(left);
@@ -184,6 +166,7 @@ function render(){
       const cell=document.createElement('div'); cell.className='cell'+(data.b?' black':'');
       const inp=document.createElement('input');
       inp.maxLength=1; inp.value=(data.v||'').toUpperCase(); inp.dataset.r=r; inp.dataset.c=c;
+      inp.setAttribute('autocomplete','off'); inp.setAttribute('autocapitalize','off'); inp.setAttribute('autocorrect','off'); inp.setAttribute('spellcheck','false');
       inp.addEventListener('input', e=>{
         if(!canEdit()) return;
         const v=(e.target.value||'').replace(/[^A-Za-zÅÄÖåäö]/g,'').toUpperCase().slice(0,1);
@@ -193,8 +176,8 @@ function render(){
         if(!canEdit() && ['ArrowLeft','ArrowRight','ArrowUp','ArrowDown','Backspace','Enter'].includes(e.key)) { e.preventDefault(); return; }
         if(e.key==='ArrowLeft'){ e.preventDefault(); move(r,c,'left'); }
         else if(e.key==='ArrowRight' || e.key==='Enter'){ e.preventDefault(); move(r,c,'right'); }
-        else if(e.key==='ArrowUp'){ e.preventDefault(); move(r,c,'up'); }
-        else if(e.key==='ArrowDown'){ e.preventDefault(); move(r,c,'down'); }
+        else if(e.key==='Up' || e.key==='ArrowUp'){ e.preventDefault(); move(r,c,'up'); }
+        else if(e.key==='Down' || e.key==='ArrowDown'){ e.preventDefault(); move(r,c,'down'); }
         else if(e.key==='Backspace'){
           if(inp.value){ e.preventDefault(); Store.cells[keyFor(r,c)] = { v:'', b:data.b }; inp.value=''; }
           else { e.preventDefault(); const nc=Math.max(0,c-1); const k=keyFor(r,nc); const prev=Store.cells[k]||{v:'',b:false}; Store.cells[k] = { ...prev, v:'' }; focusRC(r,nc); }
@@ -206,8 +189,7 @@ function render(){
     }
 
     row.appendChild(grid);
-
-    const right=document.createElement('div'); right.className='label-cell'; right.textContent=r+1; row.appendChild(right);
+    const right=document.createElement('div'); right.className='label-cell'; right.textContent=r+1; row.appendChild(right); // <-- oikean reunan numerot
     board.appendChild(row);
   }
 
@@ -224,23 +206,23 @@ function render(){
 function focusRC(r,c){ const el = document.querySelector(`.cell input[data-r="${r}"][data-c="${c}"]`); if(el){ el.focus(); el.select(); } }
 function move(r,c,dir){ if(dir==='left') c=Math.max(0,c-1); if(dir==='right') c=Math.min(N-1,c+1); if(dir==='up') r=Math.max(0,r-1); if(dir==='down') r=Math.min(N-1,r+1); focusRC(r,c); }
 
-function buildNames(){
+// Paikalliset varmuudet (pelaajalista)
+function initNamesPanel(){
   namesEl.innerHTML='';
   for(let i=0;i<10;i++){
     const inp=document.createElement('input');
-    inp.placeholder = 'Pelaaja '+(i+1);
-    inp.value = Store.names[i] || '';
+    inp.placeholder='Pelaaja '+(i+1);
+    inp.value=Store.names[i]||'';
     inp.addEventListener('input', ()=>{ Store.names[i]=inp.value; });
     namesEl.appendChild(inp);
   }
 }
 
-// ——— Offline varmistus ———
+// Offline varmuuskopiointi
 const LS_KEY = 'crossword-offline-'+room.toLowerCase();
 function lsLoad(){ try{ const s=localStorage.getItem(LS_KEY); if(s){ const d=JSON.parse(s); Object.assign(Store, d); } } catch{} }
-function lsSave(){ try{ localStorage.setItem(LS_KEY, JSON.stringify(Store)); } catch{} }
 
-// ——— Firebase REST ———
+// Firebase REST
 const cloud = {
   enabled: mode==='firebase' && dbURL,
   base: dbURL,
@@ -249,10 +231,10 @@ const cloud = {
     const res = await fetch(this.pathRoom());
     if(!res.ok) throw new Error('Pilvilataus epäonnistui');
     const data = await res.json();
-    if(!data){ return; }
-    Store.cells = data.cells||{}; Store.state = data.state||{lockBlack:true}; Store.names = data.names||{}; Store.active = data.active||null; Store.updatedAt = data.updatedAt||0; Store.meta = data.meta||{title:''};
-    setHeader(room, Store.meta.title || '');
-    setActiveInfoTxt(Store.active? `Vuoro: ${Store.active.name}` : 'Ei lukkoa');
+    if(!data) return;
+    Store.cells = data.cells||{}; Store.state = data.state||{lockBlack:true}; Store.names = data.names||{};
+    Store.active = data.active||null; Store.updatedAt = data.updatedAt||0; Store.meta = data.meta||{title:''};
+    setHeader(room, Store.meta.title || ''); setActiveInfoTxt(Store.active? `Vuoro: ${Store.active.name}` : 'Ei lukkoa');
     render();
   },
   async save(){
@@ -269,7 +251,8 @@ const cloud = {
         const res = await fetch(this.pathRoom()); if(!res.ok) return;
         const data = await res.json(); if(!data) return;
         if(data.updatedAt && data.updatedAt !== Store.updatedAt){
-          Store.cells = data.cells||{}; Store.state = data.state||{lockBlack:true}; Store.names = data.names||{}; Store.active = data.active||null; Store.meta = data.meta||{title:''}; Store.updatedAt = data.updatedAt; render();
+          Store.cells = data.cells||{}; Store.state = data.state||{lockBlack:true}; Store.names = data.names||{};
+          Store.active = data.active||null; Store.meta = data.meta||{title:''}; Store.updatedAt = data.updatedAt; render();
         } else {
           Store.active = data.active||null;
         }
@@ -281,7 +264,7 @@ const cloud = {
   },
 };
 
-// ——— Oikean reunan kontrollit ———
+// Oikea reuna: kontrollit
 const playerSelect = document.getElementById('playerSelect');
 const takeTurnBtn = document.getElementById('takeTurn');
 const releaseTurnBtn = document.getElementById('releaseTurn');
@@ -289,12 +272,7 @@ const cloudLoadBtn = document.getElementById('cloudLoad');
 const cloudSaveBtn = document.getElementById('cloudSave');
 const autoReleaseEl = document.getElementById('autoRelease');
 
-playerSelect.addEventListener('change', ()=>{
-  Store.myName = playerSelect.value || '';
-  takeTurnBtn.disabled = !Store.myName || !cloud.enabled;
-  cloudSaveBtn.disabled = !cloud.enabled;
-});
-
+playerSelect.addEventListener('change', ()=>{ Store.myName = playerSelect.value || ''; takeTurnBtn.disabled = !Store.myName || !cloud.enabled; cloudSaveBtn.disabled = !cloud.enabled; });
 lockBlackEl.addEventListener('change', ()=>{ Store.state.lockBlack = !!lockBlackEl.checked; applyEditability(); });
 
 cloudLoadBtn.addEventListener('click', async ()=>{
@@ -309,42 +287,22 @@ async function writeActive(to){
     const base = data||{cells:{},state:{lockBlack:true},names:{},meta:{title: Store.meta.title||''}};
     base.active = to; base.updatedAt = Date.now();
     await fetch(cloud.pathRoom(), { method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(base) });
-    Store.active = to; Store.updatedAt = base.updatedAt; Store.meta = base.meta; setHeader(room, Store.meta.title||''); setActiveInfoTxt(Store.active? `Vuoro: ${Store.active.name}` : 'Ei lukkoa'); applyEditability();
+    Store.active = to; Store.updatedAt = base.updatedAt; Store.meta = base.meta;
+    setHeader(room, Store.meta.title||''); setActiveInfoTxt(Store.active? `Vuoro: ${Store.active.name}` : 'Ei lukkoa'); applyEditability();
   } catch (e){ alert('Vuoron kirjaus epäonnistui'); }
 }
 
-takeTurnBtn.addEventListener('click', async ()=>{
-  if(!Store.myName){ alert('Valitse nimimerkki ensin'); return; }
-  if(!cloud.enabled){ alert('Pilvimoodi ei ole käytössä'); return; }
-  await writeActive({ name: Store.myName, since: Date.now() });
-  takeTurnBtn.disabled=true; releaseTurnBtn.disabled=false; cloudSaveBtn.disabled=false;
-});
+takeTurnBtn.addEventListener('click', async ()=>{ if(!Store.myName){ alert('Valitse nimimerkki ensin'); return; } if(!cloud.enabled){ alert('Pilvimoodi ei ole käytössä'); return; }
+  await writeActive({ name: Store.myName, since: Date.now() }); takeTurnBtn.disabled=true; releaseTurnBtn.disabled=false; cloudSaveBtn.disabled=false; });
 
-releaseTurnBtn.addEventListener('click', async ()=>{
-  if(Store.active && Store.active.name!==Store.myName){ alert(`Vuoro on ${Store.active.name}`); return; }
-  await writeActive(null);
-  takeTurnBtn.disabled = !Store.myName; releaseTurnBtn.disabled=true; applyEditability();
-});
+releaseTurnBtn.addEventListener('click', async ()=>{ if(Store.active && Store.active.name!==Store.myName){ alert(`Vuoro on ${Store.active.name}`); return; }
+  await writeActive(null); takeTurnBtn.disabled = !Store.myName; releaseTurnBtn.disabled=true; applyEditability(); });
 
-cloudSaveBtn.addEventListener('click', async ()=>{
-  if(!cloud.enabled){ alert('Pilvimoodi ei ole käytössä'); return; }
+cloudSaveBtn.addEventListener('click', async ()=>{ if(!cloud.enabled){ alert('Pilvimoodi ei ole käytössä'); return; }
   try{ await cloud.save(); if(autoReleaseEl.checked){ await writeActive(null); takeTurnBtn.disabled = !Store.myName; releaseTurnBtn.disabled=true; } }
-  catch(e){ alert('Tallennus pilveen epäonnistui'); }
-});
+  catch(e){ alert('Tallennus pilveen epäonnistui'); } });
 
-// Pelaajalista vapaaseen muistiinpanoon
-function initNamesPanel(){
-  namesEl.innerHTML='';
-  for(let i=0;i<10;i++){
-    const inp=document.createElement('input');
-    inp.placeholder='Pelaaja '+(i+1);
-    inp.value=Store.names[i]||'';
-    inp.addEventListener('input', ()=>{ Store.names[i]=inp.value; });
-    namesEl.appendChild(inp);
-  }
-}
-
-// Paikalliset Tallenna/Lataa-napit (varmuuskopio)
+// Paikalliset Tallenna/Lataa (varmuuskopio)
 document.getElementById('save').addEventListener('click', ()=>{
   const out = { n:N, cells:Store.cells };
   const blob = new Blob([JSON.stringify(out)], {type:'application/json'});
@@ -357,7 +315,7 @@ loadInput.addEventListener('change', ()=>{ if(loadInput.files[0]){ const reader=
 document.getElementById('clear').addEventListener('click', ()=>{ if(confirm('Tyhjennetäänkö koko ristikko tältä huoneelta?')){ Store.cells={}; render(); } });
 
 // Init
-function init(){
+(function init(){
   lsLoad();
   lockBlackEl.checked = !!Store.state.lockBlack;
   setHeader(room, '');
@@ -365,10 +323,9 @@ function init(){
   initNamesPanel();
   applyEditability();
   if(mode==='firebase' && dbURL){ setStatus('', 'Valmis Firebaseen – paina "Lataa pilvestä"'); } else { setStatus('', 'Offline-tila (paikallinen)'); }
-}
-init();
+})();
 
-// ——— LINKKIGENERAATTORI: luo uusi huone + otsikko pilveen ———
+// Linkkigeneraattori: luo huone + otsikko pilveen
 const roomNameEl = document.getElementById('roomName');
 const roomTitleEl = document.getElementById('roomTitle');
 const roomLink = document.getElementById('roomLink');
@@ -376,9 +333,6 @@ const roomLink = document.getElementById('roomLink');
 async function createRoomInCloud(name, title){
   if(!dbURL){ alert('Lisää URL-parametrit: ?mode=firebase&db=...'); return; }
   const path = `${dbURL.replace(/\/$/,'')}/rooms/${encodeURIComponent(name)}.json`;
-  try{
-    const cur = await fetch(path); const curData = cur.ok? await res.json() : null;
-  } catch {}
   try{
     const cur = await fetch(path); const curData = cur.ok? await cur.json() : null;
     const payload = curData || { cells:{}, state:{lockBlack:true}, names:{}, active:null, meta:{title:''}, updatedAt:0 };
