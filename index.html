@@ -18,7 +18,7 @@
   .dot.ok { background:#16a34a; }
   .dot.err { background:#ef4444; }
 
-  /* Koko lauta yhtenä gridinä: (n+2)×(n+2): vasen tyhjä + n + oikea tyhjä; ylhäällä/alla samoin */
+  /* Lauta yhtenä gridinä */
   .board {
     display:inline-block;
     background:#d1d5db;
@@ -31,13 +31,13 @@
     grid-template-columns: var(--cell) repeat(var(--n), var(--cell)) var(--cell);
     grid-template-rows:    var(--cell) repeat(var(--n), var(--cell)) var(--cell);
     gap: var(--gap);
-    background:#d1d5db;            /* gapit näkyvät harmaana */
+    background:#d1d5db;
     padding: var(--gap);
     border-radius:10px;
     box-sizing: border-box;
   }
 
-  /* Tunnisteet (kirjaimet/numerot) */
+  /* Tunnisteet */
   .label-cell{
     width:var(--cell); height:var(--cell);
     display:flex; align-items:center; justify-content:center;
@@ -45,7 +45,7 @@
     background:#f8fafc; border:1px solid #e5e7eb; border-radius:6px;
   }
 
-  /* Varsinaiset solut */
+  /* Solut */
   .cell{
     width:var(--cell); height:var(--cell);
     display:grid; place-items:center;
@@ -97,7 +97,6 @@
       </label>
       <button id="clear">Tyhjennä ristikko (huone)</button>
       <span class="grow"></span>
-      <!-- LINKKIGENERAATTORI: HUONE + OTSIKKO -->
       <input id="roomName" type="text" placeholder="Huoneen nimi (esim. POP1)" />
       <input id="roomTitle" type="text" placeholder="Huoneen otsikko (näkyy ylhäällä)" />
       <button id="makeLink">Luo linkki</button>
@@ -115,7 +114,7 @@
       <div style="font-weight:600; margin-bottom:8px;">Pelaa Firebase-pilvessä</div>
       <div class="names" style="gap:10px;">
         <select id="playerSelect">
-          <option value="">— Valitse nimesi —</option>
+          <option value="">— Valitse nimimerkki —</option>
           <option>Enni</option><option>Esme</option><option>Marika</option><option>Mauri</option><option>Mirva</option>
           <option>Pekka</option><option>Pertti</option><option>Petri</option><option>Sini</option><option>Taru</option><option>Teemu</option>
         </select>
@@ -130,6 +129,7 @@
       </div>
     </div>
 
+    <!-- Pelaajaluettelo takaisin -->
     <div class="card">
       <div style="font-weight:600; margin-bottom:8px;">Pelaajat</div>
       <div class="names" id="names"></div>
@@ -138,7 +138,7 @@
 </div>
 
 <script type="module">
-// ——— Perusasetukset ———
+// ——— Asetukset ———
 const N = 22; document.documentElement.style.setProperty('--n', N);
 const params = new URLSearchParams(location.search);
 const mode = (params.get('mode')||'offline').toLowerCase();
@@ -155,46 +155,46 @@ function setActiveInfoTxt(txt){ activeInfo.textContent = txt? ' — '+txt : ''; 
 // Tilat
 const grid = document.getElementById('boardGrid');
 const lockBlackEl = document.getElementById('lockBlack');
-const namesEl = document.getElementById('names');
+const namesPane = document.getElementById('names');
 function keyFor(r,c){ return r+','+c; }
 const Store = { cells:{}, state:{lockBlack:true}, names:{}, active:null, myName:'', meta:{title:''}, updatedAt:0 };
 
 function canEdit(){ return !Store.active || Store.active?.name === Store.myName; }
 function applyEditability(){ grid.classList.toggle('disabled-overlay', !canEdit()); }
 
-// ——— Piirto yhdellä gridillä ———
+// Piirto yhdellä gridillä
 function render(){
   grid.innerHTML='';
 
-  // 1) Ylärivin kirjaimet (row 1, col 2..N+1)
+  // Ylärivin kirjaimet
   for(let c=0;c<N;c++){
     const d=document.createElement('div'); d.className='label-cell';
     d.textContent = String.fromCharCode(65+c);
     d.style.gridRow = '1'; d.style.gridColumn = (2+c).toString();
     grid.appendChild(d);
   }
-  // 2) Alarivin kirjaimet (row N+2, col 2..N+1)
+  // Alarivin kirjaimet
   for(let c=0;c<N;c++){
     const d=document.createElement('div'); d.className='label-cell';
     d.textContent = String.fromCharCode(65+c);
     d.style.gridRow = (N+2).toString(); d.style.gridColumn = (2+c).toString();
     grid.appendChild(d);
   }
-  // 3) Vasemman reunan numerot (col 1, row 2..N+1)
+  // Vasemman reunan numerot
   for(let r=0;r<N;r++){
     const d=document.createElement('div'); d.className='label-cell';
     d.textContent = (r+1).toString();
     d.style.gridColumn = '1'; d.style.gridRow = (2+r).toString();
     grid.appendChild(d);
   }
-  // 4) Oikean reunan numerot (col N+2, row 2..N+1)
+  // Oikean reunan numerot
   for(let r=0;r<N;r++){
     const d=document.createElement('div'); d.className='label-cell';
     d.textContent = (r+1).toString();
     d.style.gridColumn = (N+2).toString(); d.style.gridRow = (2+r).toString();
     grid.appendChild(d);
   }
-  // 5) Sisäruudukko (rows 2..N+1, cols 2..N+1)
+  // Sisäruudukko
   for(let r=0;r<N;r++){
     for(let c=0;c<N;c++){
       const data=Store.cells[keyFor(r,c)]||{v:'',b:false};
@@ -225,12 +225,25 @@ function render(){
   applyEditability();
 }
 
+// Pelaajaluettelon paneeli
+function initNamesPanel(){
+  if(!namesPane) return;
+  namesPane.innerHTML='';
+  for(let i=0;i<10;i++){
+    const inp=document.createElement('input');
+    inp.placeholder='Pelaaja '+(i+1);
+    inp.value=Store.names[i]||'';
+    inp.addEventListener('input', ()=>{ Store.names[i]=inp.value; });
+    namesPane.appendChild(inp);
+  }
+}
+
 function focusRC(r,c){ const el = document.querySelector(`.cell input[data-r="${r}"][data-c="${c}"]`); if(el){ el.focus(); el.select(); } }
 function move(r,c,dir){ if(dir==='left') c=Math.max(0,c-1); if(dir==='right') c=Math.min(N-1,c+1); if(dir==='up') r=Math.max(0,r-1); if(dir==='down') r=Math.min(N-1,r+1); focusRC(r,c); }
 
-// ——— Firebase REST (sama logiikka kuin aiemmin) ———
+// Firebase REST
 const cloud = {
-  enabled: (params.get('mode')||'offline').toLowerCase()==='firebase' && dbURL,
+  enabled: mode==='firebase' && dbURL,
   pathRoom(){ return `${dbURL}/rooms/${encodeURIComponent(room)}.json`; },
   async load(){
     const res = await fetch(this.pathRoom()); if(!res.ok) throw new Error('Pilvilataus epäonnistui');
@@ -238,7 +251,7 @@ const cloud = {
     Store.cells = data.cells||{}; Store.state = data.state||{lockBlack:true}; Store.names = data.names||{};
     Store.active = data.active||null; Store.updatedAt = data.updatedAt||0; Store.meta = data.meta||{title:''};
     setHeader(room, Store.meta.title || ''); setActiveInfoTxt(Store.active? `Vuoro: ${Store.active.name}` : 'Ei lukkoa');
-    render();
+    render(); initNamesPanel();
   },
   async save(){
     if(Store.active && Store.active.name !== Store.myName){ alert(`Et ole vuorossa (vuoro: ${Store.active.name}).`); return; }
@@ -255,8 +268,11 @@ const cloud = {
         const data = await res.json(); if(!data) return;
         if(data.updatedAt && data.updatedAt !== Store.updatedAt){
           Store.cells = data.cells||{}; Store.state = data.state||{lockBlack:true}; Store.names = data.names||{};
-          Store.active = data.active||null; Store.meta = data.meta||{title:''}; Store.updatedAt = data.updatedAt; render();
-        } else { Store.active = data.active||null; }
+          Store.active = data.active||null; Store.meta = data.meta||{title:''}; Store.updatedAt = data.updatedAt;
+          render(); initNamesPanel();
+        } else {
+          Store.active = data.active||null;
+        }
         setHeader(room, (data.meta && data.meta.title) || Store.meta.title || '');
         setActiveInfoTxt(Store.active? `Vuoro: ${Store.active.name}` : 'Ei lukkoa');
         applyEditability();
@@ -265,7 +281,7 @@ const cloud = {
   },
 };
 
-// ——— Oikea sivupalkki ———
+// Oikea sivupalkki (vuorolukko + pilvi)
 const playerSelect = document.getElementById('playerSelect');
 const takeTurnBtn = document.getElementById('takeTurn');
 const releaseTurnBtn = document.getElementById('releaseTurn');
@@ -303,7 +319,7 @@ cloudSaveBtn?.addEventListener('click', async ()=>{ if(!cloud.enabled){ alert('P
   try{ await cloud.save(); if(autoReleaseEl.checked){ await writeActive(null); takeTurnBtn.disabled = !Store.myName; releaseTurnBtn.disabled=true; } }
   catch(e){ alert('Tallennus pilveen epäonnistui'); } });
 
-// ——— Varmuuskopionapit ———
+// Paikalliset varmuuskopionapit
 document.getElementById('save').addEventListener('click', ()=>{
   const out = { n:N, cells:Store.cells };
   const blob = new Blob([JSON.stringify(out)], {type:'application/json'});
@@ -315,7 +331,7 @@ loadInput.addEventListener('change', ()=>{ if(loadInput.files[0]){ const reader=
 
 document.getElementById('clear').addEventListener('click', ()=>{ if(confirm('Tyhjennetäänkö koko ristikko tältä huoneelta?')){ Store.cells={}; render(); } });
 
-// ——— Linkkigeneraattori ———
+// Linkkigeneraattori
 const roomNameEl = document.getElementById('roomName');
 const roomTitleEl = document.getElementById('roomTitle');
 const roomLink = document.getElementById('roomLink');
@@ -345,6 +361,7 @@ document.getElementById('makeLink').addEventListener('click', async ()=>{
   lockBlackEl.checked = !!Store.state.lockBlack;
   setHeader(room, '');
   render();
+  initNamesPanel();
   if(mode==='firebase' && dbURL){ setStatus('', 'Valmis Firebaseen – paina "Lataa pilvestä"'); } else { setStatus('', 'Offline-tila (paikallinen)'); }
 })();
 </script>
