@@ -114,7 +114,7 @@
       <div style="font-weight:600; margin-bottom:8px;">Pelaa Firebase-pilvessä</div>
       <div class="names" style="gap:10px;">
         <select id="playerSelect">
-          <option value="">— Valitse nimesi —</option>
+          <option value="">— Valitse nimimerkki —</option>
           <option>Enni</option><option>Esme</option><option>Marika</option><option>Mauri</option><option>Mirva</option>
           <option>Pekka</option><option>Pertti</option><option>Petri</option><option>Sini</option><option>Taru</option><option>Teemu</option>
         </select>
@@ -129,7 +129,7 @@
       </div>
     </div>
 
-    <!-- Pelaajaluettelo takaisin -->
+    <!-- Pelaajaluettelo -->
     <div class="card">
       <div style="font-weight:600; margin-bottom:8px;">Pelaajat</div>
       <div class="names" id="names"></div>
@@ -225,7 +225,7 @@ function render(){
   applyEditability();
 }
 
-// Pelaajaluettelon paneeli
+// Pelaajaluettelo
 function initNamesPanel(){
   if(!namesPane) return;
   namesPane.innerHTML='';
@@ -241,6 +241,9 @@ function initNamesPanel(){
 function focusRC(r,c){ const el = document.querySelector(`.cell input[data-r="${r}"][data-c="${c}"]`); if(el){ el.focus(); el.select(); } }
 function move(r,c,dir){ if(dir==='left') c=Math.max(0,c-1); if(dir==='right') c=Math.min(N-1,c+1); if(dir==='up') r=Math.max(0,r-1); if(dir==='down') r=Math.min(N-1,r+1); focusRC(r,c); }
 
+// ——— Pilven suojakaide ———
+let cloudLoadedOnce = false; // asetetaan todeksi kun huone on ladattu pilvestä
+
 // Firebase REST
 const cloud = {
   enabled: mode==='firebase' && dbURL,
@@ -251,13 +254,21 @@ const cloud = {
     Store.cells = data.cells||{}; Store.state = data.state||{lockBlack:true}; Store.names = data.names||{};
     Store.active = data.active||null; Store.updatedAt = data.updatedAt||0; Store.meta = data.meta||{title:''};
     setHeader(room, Store.meta.title || ''); setActiveInfoTxt(Store.active? `Vuoro: ${Store.active.name}` : 'Ei lukkoa');
+    cloudLoadedOnce = true;
     render(); initNamesPanel();
   },
   async save(){
     if(Store.active && Store.active.name !== Store.myName){ alert(`Et ole vuorossa (vuoro: ${Store.active.name}).`); return; }
+    // Varoitus jos ei ole ladattu pilvestä kertaakaan
+    if(!cloudLoadedOnce){
+      const ok = confirm('Et ole ladannut tätä huonetta pilvestä. Oletko varma, ettet korvaa toisten tekemiä muutoksia?');
+      if(!ok) return;
+    }
     const payload = { cells:Store.cells, state:Store.state, names:Store.names, active:Store.active, meta:Store.meta, updatedAt: Date.now() };
     const res = await fetch(this.pathRoom(), { method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) });
     if(!res.ok) throw new Error('Pilvitallennus epäonnistui');
+    // tallennuksen jälkeen katsotaan, että meillä on tuore leima
+    Store.updatedAt = payload.updatedAt;
   },
   pollHandle:null,
   startPoll(){
@@ -317,17 +328,41 @@ releaseTurnBtn?.addEventListener('click', async ()=>{ if(Store.active && Store.a
 
 cloudSaveBtn?.addEventListener('click', async ()=>{ if(!cloud.enabled){ alert('Pilvimoodi ei ole käytössä'); return; }
   try{ await cloud.save(); if(autoReleaseEl.checked){ await writeActive(null); takeTurnBtn.disabled = !Store.myName; releaseTurnBtn.disabled=true; } }
-  catch(e){ alert('Tallennus pilveen epäonnistui'); } });
+  catch(e){ alert('Tallennus pilveen epäonnistui: '+e.message); } });
 
-// Paikalliset varmuuskopionapit
+// ——— JSON-varmuuskopio tallentaa myös otsikon ———
 document.getElementById('save').addEventListener('click', ()=>{
-  const out = { n:N, cells:Store.cells };
+  const out = {
+    n: N,
+    cells: Store.cells,
+    state: Store.state,
+    meta: Store.meta,       // <-- otsikko mukaan
+    updatedAt: Store.updatedAt || Date.now()
+  };
   const blob = new Blob([JSON.stringify(out)], {type:'application/json'});
   const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=`ristikko-${room}.json`; a.click(); URL.revokeObjectURL(a.href);
 });
 const loadInput = document.getElementById('load');
 document.getElementById('loadBtn').addEventListener('click', ()=> loadInput.click());
-loadInput.addEventListener('change', ()=>{ if(loadInput.files[0]){ const reader=new FileReader(); reader.onload=()=>{ try{ const data=JSON.parse(reader.result); if(!data||!data.cells) throw new Error('Virheellinen tiedosto'); Store.cells=data.cells; render(); } catch(e){ alert('Lataus epäonnistui: '+e.message); } }; reader.readAsText(loadInput.files[0]); } });
+loadInput.addEventListener('change', ()=>{
+  if(loadInput.files[0]){
+    const reader=new FileReader();
+    reader.onload=()=>{
+      try{
+        const data=JSON.parse(reader.result);
+        if(!data||!data.cells) throw new Error('Virheellinen tiedosto');
+        // palautetaan kaikki mitä osataan
+        Store.cells=data.cells;
+        if(data.state) Store.state=data.state;
+        if(data.meta)  Store.meta=data.meta;
+        if(data.updatedAt) Store.updatedAt=data.updatedAt;
+        setHeader(room, Store.meta.title || '');
+        render(); initNamesPanel();
+      } catch(e){ alert('Lataus epäonnistui: '+e.message); }
+    };
+    reader.readAsText(loadInput.files[0]);
+  }
+});
 
 document.getElementById('clear').addEventListener('click', ()=>{ if(confirm('Tyhjennetäänkö koko ristikko tältä huoneelta?')){ Store.cells={}; render(); } });
 
