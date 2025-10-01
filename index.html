@@ -125,7 +125,7 @@
           <button id="releaseTurn" disabled>Luovuta vuoro</button>
           <button id="cloudSave" disabled>Tallenna pilveen</button>
         </div>
-        <div class="muted">Uusi peli alhaalla (Huone + Otsikko ? Luo linkki). Pelaajat eivät muuta otsikkoa.</div>
+        <div class="muted">Uusi peli alhaalla (Huone + Otsikko → Luo linkki). Pelaajat eivät muuta otsikkoa.</div>
       </div>
     </div>
 
@@ -144,17 +144,6 @@ const params = new URLSearchParams(location.search);
 const mode = (params.get('mode')||'offline').toLowerCase();
 const room = (params.get('room')||'POP1').trim();
 const dbURL = (params.get('db')||'').replace(/\/$/, '');
-
-// --- identity (clientId + myName) ---
-const clientId = localStorage.getItem('clientId')
-  || (crypto.randomUUID?.() || Math.random().toString(36).slice(2));
-localStorage.setItem('clientId', clientId);
-
-function setMyName(n){
-  Store.myName = (n || '').trim();
-  localStorage.setItem('myName', Store.myName);
-}
-setMyName(localStorage.getItem('myName') || '');
 
 // Otsikko & status
 const titleEl = document.getElementById('title');
@@ -297,60 +286,11 @@ const cloud = {
         }
         setHeader(room, (data.meta && data.meta.title) || Store.meta.title || '');
         setActiveInfoTxt(Store.active? `Vuoro: ${Store.active.name}` : 'Ei lukkoa');
-
-// --- presence-lista ---
-try {
-  const presRes = await fetch(`${dbURL}/rooms/${encodeURIComponent(room)}/presence.json`);
-  if (presRes.ok) {
-    const pres = await presRes.json() || {};
-    const arr = Object.values(pres)
-      .filter(Boolean)
-      .map(p => p?.name)
-      .filter(Boolean)
-      .sort((a,b) => a.localeCompare(b, 'fi'));
-
-    // oikean kortin “Pelaajat”
-    namesPane.innerHTML = arr.length
-      ? arr.map(n => `<div style="padding:8px 10px;border:1px solid #cbd5e1;border-radius:10px;">${n}</div>`).join('')
-      : '<div class="muted">ei pelaajia</div>';
-
-    // ylästatus: “pelaajat: …”
-    setActiveInfoTxt(arr.length ? `pelaajat: ${arr.join(', ')}` : 'pelaajat: ei muita');
-  }
-} catch {}
-
-applyEditability();
+        applyEditability();
       } catch{}
     }, 2000);
   },
 };
-
-// --- presence (REST) ---
-const presencePath = () =>
-  `${dbURL}/rooms/${encodeURIComponent(room)}/presence/${encodeURIComponent(clientId)}.json`;
-
-let hbTimer = null;
-
-async function presenceUp(){
-  if(!cloud.enabled || !Store.myName) return;
-  await fetch(presencePath(), {
-    method:'PUT', headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({ name: Store.myName, lastSeen: Date.now() })
-  }).catch(()=>{});
-  clearInterval(hbTimer);
-  hbTimer = setInterval(() => {
-    fetch(presencePath(), {
-      method:'PATCH', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ lastSeen: Date.now() })
-    }).catch(()=>{});
-  }, 20000);
-}
-
-function presenceDown(){
-  clearInterval(hbTimer);
-  return fetch(presencePath(), { method:'DELETE', keepalive:true }).catch(()=>{});
-}
-window.addEventListener('beforeunload', presenceDown);
 
 // Oikea sivupalkki (vuorolukko + pilvi)
 const playerSelect = document.getElementById('playerSelect');
@@ -360,12 +300,7 @@ const cloudLoadBtn = document.getElementById('cloudLoad');
 const cloudSaveBtn = document.getElementById('cloudSave');
 const autoReleaseEl = document.getElementById('autoRelease');
 
-playerSelect?.addEventListener('change', async ()=>{
-  setMyName(playerSelect.value || '');
-  takeTurnBtn.disabled = !Store.myName || !cloud.enabled;
-  cloudSaveBtn.disabled = !cloud.enabled;
-  if (Store.myName) await presenceUp();
-});
+playerSelect?.addEventListener('change', ()=>{ Store.myName = playerSelect.value || ''; takeTurnBtn.disabled = !Store.myName || !cloud.enabled; cloudSaveBtn.disabled = !cloud.enabled; });
 lockBlackEl?.addEventListener('change', ()=>{ Store.state.lockBlack = !!lockBlackEl.checked; applyEditability(); });
 
 cloudLoadBtn?.addEventListener('click', async ()=>{
@@ -381,30 +316,7 @@ async function writeActive(to){
     base.active = to; base.updatedAt = Date.now();
     await fetch(cloud.pathRoom(), { method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(base) });
     Store.active = to; Store.updatedAt = base.updatedAt; Store.meta = base.meta;
-    setHeader(room, Store.meta.title||''); setActiveInfoTxt(Store.active? `Vuoro: ${Store.active.name}` : 'Ei lukkoa');
-
-// --- presence-lista ---
-try {
-  const presRes = await fetch(`${dbURL}/rooms/${encodeURIComponent(room)}/presence.json`);
-  if (presRes.ok) {
-    const pres = await presRes.json() || {};
-    const arr = Object.values(pres)
-      .filter(Boolean)
-      .map(p => p?.name)
-      .filter(Boolean)
-      .sort((a,b) => a.localeCompare(b, 'fi'));
-
-    // oikean kortin “Pelaajat”
-    namesPane.innerHTML = arr.length
-      ? arr.map(n => `<div style="padding:8px 10px;border:1px solid #cbd5e1;border-radius:10px;">${n}</div>`).join('')
-      : '<div class="muted">ei pelaajia</div>';
-
-    // ylästatus: “pelaajat: …”
-    setActiveInfoTxt(arr.length ? `pelaajat: ${arr.join(', ')}` : 'pelaajat: ei muita');
-  }
-} catch {}
-
-applyEditability();
+    setHeader(room, Store.meta.title||''); setActiveInfoTxt(Store.active? `Vuoro: ${Store.active.name}` : 'Ei lukkoa'); applyEditability();
   } catch(e){ alert('Vuoron kirjaus epäonnistui'); }
 }
 
@@ -461,7 +373,7 @@ const roomLink = document.getElementById('roomLink');
 
 async function createRoomInCloud(name, title){
   if(!dbURL){ alert('Lisää URL-parametrit: ?mode=firebase&db=...'); return; }
-  const path = `${dbURL.replace(/\/$/, '')}/rooms/${encodeURIComponent(name)}.json`;
+  const path = `${dbURL.replace(/\/$/,'')}/rooms/${encodeURIComponent(name)}.json`;
   try{
     const cur = await fetch(path); const curData = cur.ok? await cur.json() : null;
     const payload = curData || { cells:{}, state:{lockBlack:true}, names:{}, active:null, meta:{title:''}, updatedAt:0 };
