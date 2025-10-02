@@ -314,9 +314,11 @@ var cloud={
 
   readSnapshots: async function(){ var res=await fetch(this.pathSnapshots()); if(!res.ok) throw new Error('Snap-luku epäonnistui'); return res.json(); },
   appendSnapshot: async function(id,snap){
-    // diagnostiikka: näet konsolista (F12 → Console) mitä lähetetään
-    try{ console.log('APPEND payload →', JSON.stringify({}), { id:id, snap:snap }); }catch(e){}
-    var res=await fetch(this.pathSnapshots(),{ method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify((function(){ var o={}; o[id]=snap; return o; })()) });
+    // DIAG: tulostetaan lapsi-avaimeen tehtävä PUT
+    try{ console.log('APPEND → PUT child:', id, snap && snap.ts); }catch(e){}
+    var res=await fetch(this.pathSnapshotsChild(id),{
+      method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(snap)
+    });
     if(!res.ok) throw new Error('Snap-lisäys epäonnistui');
     return res.json();
   },
@@ -328,10 +330,7 @@ var cloud={
     setHeader(room, Store.meta.title||''); renderPlayersLine(Store.players); setActiveInfoTxt(Store.active ? ('Vuoro: '+Store.active.name) : 'Ei lukkoa');
     cloudLoadedOnce=true; render(); applyEditability();
   },
-  saveCurrentOnly: async function(){
-    var payload = { cells:Store.cells, state:Store.state, players:Store.players, active:Store.active, meta:Store.meta, updatedAt:Date.now() };
-    await this.write(payload); Store.updatedAt = payload.updatedAt;
-  }
+  saveCurrentOnly: async function(){ var payload = { cells:Store.cells, state:Store.state, players:Store.players, active:Store.active, meta:Store.meta, updatedAt:Date.now() }; await this.write(payload); Store.updatedAt = payload.updatedAt; }
 };
 
 /* =========================
@@ -339,16 +338,24 @@ var cloud={
    ========================= */
 async function saveSnapshot(label){
   var now = Date.now();
-  var id = now+'_'+Math.random().toString(36).slice(2,7); // uniikki avain
-  var snap = { ts:now, by:Store.myName||'', label: label||('Luovutus — '+(Store.myName||'')+' — '+fmt(now)), cells: Store.cells, state: Store.state, meta: Store.meta };
+  var id  = now + '_' + Math.random().toString(36).slice(2,7); // uniikki avain
+
+  var snap = {
+    ts: now,
+    by: Store.myName || '',
+    label: label || ('Luovutus — ' + (Store.myName||'') + ' — ' + fmt(now)),
+    cells: Store.cells,
+    state: Store.state,
+    meta:  Store.meta
+  };
 
   await cloud.saveCurrentOnly();
   await cloud.appendSnapshot(id, snap);
 
   var current = await cloud.readSnapshots() || {};
-  var entries = Object.entries(current).sort(function(a,b){ return (b[1].ts||0) - (a[1].ts||0); });
+  var entries = Object.entries(current).sort(function(a,b){ return ((b[1] && b[1].ts) || 0) - ((a[1] && a[1].ts) || 0); });
   var extra = entries.slice(SNAPSHOT_LIMIT);
-  for (var i=0;i<extra.length;i++){ var oldId = extra[i][0]; await cloud.deleteSnapshot(oldId); }
+  for (var i=0; i<extra.length; i++){ await cloud.deleteSnapshot(extra[i][0]); }
 }
 
 /* =========================
@@ -480,8 +487,7 @@ function renderSnapshotsList(snapshotsObj){
       });
     })(sn);
 
-    row.appendChild(left); row.appendChild(btn);
-    snapshotsList.appendChild(row);
+    row.appendChild(left); row.appendChild(btn); snapshotsList.appendChild(row);
   }
 }
 
@@ -529,7 +535,7 @@ document.getElementById('clear').addEventListener('click', function(){
 var roomNameEl=document.getElementById('roomName'); var roomTitleEl=document.getElementById('roomTitle'); var roomLink=document.getElementById('roomLink');
 async function createRoomInCloud(name,title){
   if(!dbURL){ alert('Lisää URL-parametrit: ?mode=firebase&db=...'); return; }
-  var pathBase = dbURL.replace(/\/$/,'')+'/rooms/'+encodeURIComponent(name)+'.json';
+  var pathBase = dbURL.replace(/\/$,'')+'/rooms/'+encodeURIComponent(name)+'.json';
   var baseURL = authToken ? (pathBase+'?auth='+encodeURIComponent(authToken)) : pathBase;
   try{
     var cur = await fetch(baseURL); var curData = cur.ok? await cur.json() : null;
