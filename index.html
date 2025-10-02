@@ -95,7 +95,7 @@
     <h1 id="title">Sanaristikko</h1>
     <div class="subhint">Klikkaa ruutua ja lisää kirjain. Ristikon huone on nettiosoitteen lopussa, Pekka lähettää linkin.</div>
 
-    <div class="status"><span id="statusDot" class="dot"></span><span id="statusText">Offline-tila (paikallinen)</span><span id="activeInfo" class="muted"></span></div>
+    <div class="status"><span id="statusDot" class="dot"></span><span id="statusText">Offline-tila (paikallinen)</span><span id="activeInfo" class="muted"></span><button id="reconnect" style="margin-left:auto;display:none;">Yhdistä</button></div>
 
     <!-- Pelaajaluettelo -->
     <div id="playersLine" class="players-line" aria-live="polite"></div>
@@ -190,7 +190,7 @@ if (!dbURL) { dbURL = 'https://sukkulointi-default-rtdb.europe-west1.firebasedat
 var titleEl = document.getElementById('title');
 var playersLineEl = document.getElementById('playersLine');
 function setHeader(roomName, title){ titleEl.textContent = 'Sanaristikko '+roomName.toUpperCase()+ (title? ' — '+title : ''); }
-var statusDot = document.getElementById('statusDot'); var statusText = document.getElementById('statusText'); var activeInfo = document.getElementById('activeInfo');
+var statusDot = document.getElementById('statusDot'); var statusText = document.getElementById('statusText'); var activeInfo = document.getElementById('activeInfo'); var reconnectBtn = document.getElementById('reconnect');
 function setStatus(cls, msg){ statusDot.classList.remove('ok','err'); if(cls) statusDot.classList.add(cls); statusText.textContent = msg; }
 function setActiveInfoTxt(txt){ activeInfo.textContent = txt? ' — '+txt : ''; }
 function renderPlayersLine(playersObj){
@@ -374,6 +374,11 @@ async function saveSnapshot(label){
 /* =========================
    VUORO – kirjautuminen ja lukko
    ========================= */
+if (reconnectBtn) reconnectBtn.addEventListener('click', async function(){
+  setStatus('', 'Yhdistetään Firebaseen…');
+  try{ await cloud.load(); setStatus('ok','Firebase-yhteys OK'); startPoll(); refreshButtons(); applyEditability(); }
+  catch(e){ setStatus('err','Pilviyhteys epäonnistui – tarkista parametrit'); }
+});
 var playerSelect=document.getElementById('playerSelect');
 var takeTurnBtn=document.getElementById('takeTurn');
 var releaseTurnBtn=document.getElementById('releaseTurn');
@@ -600,7 +605,16 @@ function startPoll(){
   lockBlackEl.checked = !!Store.state.lockBlack;
   setHeader(room, '');
   render(); applyEditability();
-  if(mode==='firebase' && dbURL){ setStatus('', 'Valmis Firebaseen – paina "Lataa pilvestä"'); } else { setStatus('', 'Offline-tila (paikallinen)'); }
+  if (mode==='firebase' && dbURL) {
+    if (reconnectBtn) reconnectBtn.style.display='inline-block';
+    setStatus('', 'Yhdistetään Firebaseen…');
+    cloud.load().then(function(){
+      setStatus('ok','Firebase-yhteys OK');
+      startPoll(); refreshButtons(); applyEditability();
+    }).catch(function(){ setStatus('err','Pilviyhteys epäonnistui – paina "Yhdistä"'); });
+  } else {
+    setStatus('', 'Offline-tila (paikallinen)');
+  }
 })();
 </script>
 </body>
