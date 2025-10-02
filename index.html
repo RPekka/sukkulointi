@@ -180,6 +180,11 @@ var room = (params.get('room')||'POP1').trim();
 var dbURL = (params.get('db')||'').replace(/\/$/, '');
 var authToken = (params.get('auth')||'').trim(); // valinnainen
 
+// ===== AUTOMAATTINEN PILVIMOODI, JOS URL-PARAMETREJA EI OLE =====
+// (poistaa "Ristikko on offline" -tilanteen kun avaat sivun ilman parametreja)
+if (!params.get('mode')) { mode = 'firebase'; }
+if (!dbURL) { dbURL = 'https://sukkulointi-default-rtdb.europe-west1.firebasedatabase.app'; }
+
 // Otsikko & status
 var titleEl = document.getElementById('title');
 var playersLineEl = document.getElementById('playersLine');
