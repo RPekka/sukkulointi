@@ -1,5 +1,5 @@
 <!doctype html>
-<!-- Version 16 (snapshot fix: PATCH wrapper) -->
+<!-- Version 17 (snapshots poistettu, automaattinen pilviyhteys, Lataa-painike poistettu) -->
 <html lang="fi">
 <head>
 <meta charset="utf-8" />
@@ -35,45 +35,18 @@
 
   /* Lauta yhtenä gridinä */
   .board { display:inline-block; background:#d1d5db; padding:var(--gap); border:1px solid #d1d5db; border-radius:12px; }
-  .board-grid{
-    display:grid;
-    grid-template-columns: var(--cell) repeat(var(--n), var(--cell)) var(--cell);
-    grid-template-rows:    var(--cell) repeat(var(--n), var(--cell)) var(--cell);
-    gap: var(--gap);
-    background:#d1d5db;
-    padding: var(--gap);
-    border-radius:10px;
-    box-sizing: border-box;
-  }
+  .board-grid{ display:grid; grid-template-columns: var(--cell) repeat(var(--n), var(--cell)) var(--cell); grid-template-rows: var(--cell) repeat(var(--n), var(--cell)) var(--cell); gap: var(--gap); background:#d1d5db; padding: var(--gap); border-radius:10px; box-sizing: border-box; }
 
   /* Tunnisteet */
-  .label-cell{
-    width:var(--cell); height:var(--cell);
-    display:flex; align-items:center; justify-content:center;
-    font-size:12px; font-weight:700; color:#0b1116;
-    background:#f8fafc; border:1px solid #e5e7eb; border-radius:6px;
-  }
+  .label-cell{ width:var(--cell); height:var(--cell); display:flex; align-items:center; justify-content:center; font-size:12px; font-weight:700; color:#0b1116; background:#f8fafc; border:1px solid #e5e7eb; border-radius:6px; }
 
   /* Solut */
-  .cell{
-    width:var(--cell); height:var(--cell);
-    display:grid; place-items:center;
-    background:#ffffff; border:1px solid #e5e7eb; border-radius:6px; position:relative;
-  }
-  .cell input{
-    width:100%; height:100%;
-    text-align:center; font-weight:800; font-size:18px; text-transform:uppercase;
-    background:transparent; border:none; color:#0b1116; outline:none;
-  }
-  .cell input:disabled{
-    opacity: 1;
-    color: #0b1116;
-    background: transparent;
-  }
+  .cell{ width:var(--cell); height:var(--cell); display:grid; place-items:center; background:#ffffff; border:1px solid #e5e7eb; border-radius:6px; position:relative; }
+  .cell input{ width:100%; height:100%; text-align:center; font-weight:800; font-size:18px; text-transform:uppercase; background:transparent; border:none; color:#0b1116; outline:none; }
+  .cell input:disabled{ opacity: 1; color: #0b1116; background: transparent; }
   .cell.black{ background:#0f1720; border-color:#0f1720; }
   .cell.black input{ visibility:hidden; pointer-events:none; }
-  .cell.black::after{ content:""; position:absolute; inset:0; border-radius:6px;
-    background:repeating-linear-gradient(45deg, #0f1720 0 8px, #142237 8px 16px); opacity:.9; }
+  .cell.black::after{ content:""; position:absolute; inset:0; border-radius:6px; background:repeating-linear-gradient(45deg, #0f1720 0 8px, #142237 8px 16px); opacity:.9; }
 
   .toolbar { display:flex; flex-wrap:wrap; gap:10px; align-items:center; margin:12px 0 0; }
   .toolbar button, .toolbar input[type="text"], .toolbar input[type="file"], .toolbar label { background:#ffffff; color:#0b1116; border:1px solid #cbd5e1; border-radius:10px; padding:8px 10px; }
@@ -95,7 +68,12 @@
     <h1 id="title">Sanaristikko</h1>
     <div class="subhint">Klikkaa ruutua ja lisää kirjain. Ristikon huone on nettiosoitteen lopussa, Pekka lähettää linkin.</div>
 
-    <div class="status"><span id="statusDot" class="dot"></span><span id="statusText">Offline-tila (paikallinen)</span><span id="activeInfo" class="muted"></span><button id="reconnect" style="margin-left:auto;display:none;">Yhdistä</button></div>
+    <div class="status">
+      <span id="statusDot" class="dot"></span>
+      <span id="statusText">Yhdistetään Firebaseen…</span>
+      <span id="activeInfo" class="muted"></span>
+      <button id="reconnect" style="margin-left:auto;display:none;">Yhdistä</button>
+    </div>
 
     <!-- Pelaajaluettelo -->
     <div id="playersLine" class="players-line" aria-live="polite"></div>
@@ -136,9 +114,8 @@
         <option>Taru</option><option>Teemu</option>
       </select>
 
-      <!-- Ylärivi -->
+      <!-- Ylärivi (Lataa-painike poistettu, kytkeydytään automaattisesti) -->
       <div class="btn-row" style="margin-bottom:8px;">
-        <button id="cloudLoad">Lataa pilvestä</button>
         <button id="signIn">Kirjaudu</button>
       </div>
 
@@ -154,17 +131,6 @@
         <button id="sendMessage">Lähetä viesti</button>
       </div>
     </div>
-
-    <!-- Tallennus/versiot – näkyy vain Pekalle -->
-    <div id="versionsCard" class="card" style="display:none;">
-      <div style="font-weight:600; margin-bottom:8px;">Tallennukset (Pekka)</div>
-      <div class="btn-row" style="margin-bottom:8px;">
-        <button id="refreshSnapshots">Päivitä lista</button>
-        <button id="resetSnapshots">Tyhjennä tallennukset</button>
-        <a id="rawSnapshotsLink" class="link" href="#" target="_blank" rel="noopener">Avaa snapshots JSON</a>
-      </div>
-      <div id="snapshotsList" class="muted">Ei tallennuksia vielä.</div>
-    </div>
   </div>
 </div>
 
@@ -173,16 +139,13 @@
    ASETUKSET
    ========================= */
 var N = 22; document.documentElement.style.setProperty('--n', N);
-var SNAPSHOT_LIMIT = 5;
-
 var params = new URLSearchParams(location.search);
 var mode = (params.get('mode')||'offline').toLowerCase();
 var room = (params.get('room')||'POP1').trim();
 var dbURL = (params.get('db')||'').replace(/\/$/, '');
 var authToken = (params.get('auth')||'').trim(); // valinnainen
 
-// ===== AUTOMAATTINEN PILVIMOODI, JOS URL-PARAMETREJA EI OLE =====
-// (poistaa "Ristikko on offline" -tilanteen kun avaat sivun ilman parametreja)
+// (valinnainen fallback – ei vaikuta kun käytät parametreja)
 if (!params.get('mode')) { mode = 'firebase'; }
 if (!dbURL) { dbURL = 'https://sukkulointi-default-rtdb.europe-west1.firebasedatabase.app'; }
 
@@ -193,14 +156,8 @@ function setHeader(roomName, title){ titleEl.textContent = 'Sanaristikko '+roomN
 var statusDot = document.getElementById('statusDot'); var statusText = document.getElementById('statusText'); var activeInfo = document.getElementById('activeInfo'); var reconnectBtn = document.getElementById('reconnect');
 function setStatus(cls, msg){ statusDot.classList.remove('ok','err'); if(cls) statusDot.classList.add(cls); statusText.textContent = msg; }
 function setActiveInfoTxt(txt){ activeInfo.textContent = txt? ' — '+txt : ''; }
-function renderPlayersLine(playersObj){
-  var names = Object.keys(playersObj||{}).filter(function(k){ return playersObj[k]; });
-  playersLineEl.textContent = names.length ? ('pelaajat: ' + names.join(', ')) : '';
-}
-function fmt(ts){
-  var d = new Date(ts); var pad = function(n){ return String(n).padStart(2,'0'); };
-  return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate())+' '+pad(d.getHours())+':'+pad(d.getMinutes())+':'+pad(d.getSeconds());
-}
+function renderPlayersLine(playersObj){ var names = Object.keys(playersObj||{}).filter(function(k){ return playersObj[k]; }); playersLineEl.textContent = names.length ? ('pelaajat: ' + names.join(', ')) : ''; }
+function fmt(ts){ var d = new Date(ts); var pad = function(n){ return String(n).padStart(2,'0'); }; return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate())+' '+pad(d.getHours())+':'+pad(d.getMinutes())+':'+pad(d.getSeconds()); }
 
 /* =========================
    UI-ELEMENTIT & TILAT
@@ -209,95 +166,27 @@ var grid = document.getElementById('boardGrid');
 var lockBlackEl = document.getElementById('lockBlack');
 function keyFor(r,c){ return r+','+c; }
 var Store = { cells:{}, state:{lockBlack:true}, players:{}, active:null, myName:'', meta:{title:''}, updatedAt:0 };
-
 function canEdit(){ if (!cloud.enabled) return true; return !!(Store.active && Store.active.name === Store.myName); }
-function applyEditability(){
-  var editable = canEdit();
-  var inputs = document.querySelectorAll('.cell input');
-  for (var i=0;i<inputs.length;i++){
-    var inp = inputs[i];
-    if (editable) { inp.removeAttribute('disabled'); inp.style.cursor=''; }
-    else { inp.setAttribute('disabled','true'); inp.style.cursor='not-allowed'; }
-  }
-}
+function applyEditability(){ var editable = canEdit(); var inputs = document.querySelectorAll('.cell input'); for (var i=0;i<inputs.length;i++){ var inp = inputs[i]; if (editable) { inp.removeAttribute('disabled'); inp.style.cursor=''; } else { inp.setAttribute('disabled','true'); inp.style.cursor='not-allowed'; } } }
 
 /* =========================
    RENDERÖINTI – RUUDUKKO
    ========================= */
-function render(){
-  grid.innerHTML='';
-
-  // Ylärivin kirjaimet
-  for(var c=0;c<N;c++){
-    var d=document.createElement('div'); d.className='label-cell';
-    d.textContent=String.fromCharCode(65+c);
-    d.style.gridRow='1'; d.style.gridColumn=(2+c).toString();
-    grid.appendChild(d);
-  }
-  // Alarivi
-  for(var c2=0;c2<N;c2++){
-    var d2=document.createElement('div'); d2.className='label-cell';
-    d2.textContent=String.fromCharCode(65+c2);
-    d2.style.gridRow=(N+2).toString(); d2.style.gridColumn=(2+c2).toString();
-    grid.appendChild(d2);
-  }
-  // Vasemman reunan numerot
-  for(var r=0;r<N;r++){
-    var d3=document.createElement('div'); d3.className='label-cell';
-    d3.textContent=(r+1).toString();
-    d3.style.gridColumn='1'; d3.style.gridRow=(2+r).toString();
-    grid.appendChild(d3);
-  }
-  // Oikea reuna
-  for(var r2=0;r2<N;r2++){
-    var d4=document.createElement('div'); d4.className='label-cell';
-    d4.textContent=(r2+1).toString();
-    d4.style.gridColumn=(N+2).toString(); d4.style.gridRow=(2+r2).toString();
-    grid.appendChild(d4);
-  }
-  // Solut
+function render(){ grid.innerHTML='';
+  for(var c=0;c<N;c++){ var d=document.createElement('div'); d.className='label-cell'; d.textContent=String.fromCharCode(65+c); d.style.gridRow='1'; d.style.gridColumn=(2+c).toString(); grid.appendChild(d); }
+  for(var c2=0;c2<N;c2++){ var d2=document.createElement('div'); d2.className='label-cell'; d2.textContent=String.fromCharCode(65+c2); d2.style.gridRow=(N+2).toString(); d2.style.gridColumn=(2+c2).toString(); grid.appendChild(d2); }
+  for(var r=0;r<N;r++){ var d3=document.createElement('div'); d3.className='label-cell'; d3.textContent=(r+1).toString(); d3.style.gridColumn='1'; d3.style.gridRow=(2+r).toString(); grid.appendChild(d3); }
+  for(var r2=0;r2<N;r2++){ var d4=document.createElement('div'); d4.className='label-cell'; d4.textContent=(r2+1).toString(); d4.style.gridColumn=(N+2).toString(); d4.style.gridRow=(2+r2).toString(); grid.appendChild(d4); }
   for(var rr=0;rr<N;rr++){
     for(var cc=0;cc<N;cc++){
       var data=Store.cells[keyFor(rr,cc)]||{v:'',b:false};
       var cell=document.createElement('div'); cell.className='cell'+(data.b?' black':''); cell.setAttribute('role','gridcell'); cell.style.gridRow=(2+rr).toString(); cell.style.gridColumn=(2+cc).toString();
-
       var inp=document.createElement('input'); inp.maxLength=1; inp.value=(data.v||'').toUpperCase(); inp.setAttribute('data-r', rr); inp.setAttribute('data-c', cc);
       inp.setAttribute('inputmode','latin'); inp.setAttribute('autocomplete','off'); inp.setAttribute('autocapitalize','off'); inp.setAttribute('autocorrect','off'); inp.setAttribute('spellcheck','false'); inp.setAttribute('aria-label','Rivi '+(rr+1)+', Sarake '+(cc+1));
-
-      inp.addEventListener('input', function(e){
-        if(!canEdit()) return;
-        var r = parseInt(this.getAttribute('data-r'),10);
-        var c = parseInt(this.getAttribute('data-c'),10);
-        var d = Store.cells[keyFor(r,c)]||{v:'',b:false};
-        var v=(e.target.value||'').replace(/[^A-Za-zÅÄÖåäö]/g,'').toUpperCase().slice(0,1);
-        e.target.value=v; Store.cells[keyFor(r,c)] = { v: v, b: d.b }; if(v){ move(r,c,'right'); }
-      });
-      inp.addEventListener('keydown', function(e){
-        var r = parseInt(this.getAttribute('data-r'),10);
-        var c = parseInt(this.getAttribute('data-c'),10);
-        var d = Store.cells[keyFor(r,c)]||{v:'',b:false};
-        if(!canEdit() && ['ArrowLeft','ArrowRight','ArrowUp','ArrowDown','Backspace','Enter'].indexOf(e.key)!==-1){ e.preventDefault(); return; }
-        if(e.key==='ArrowLeft'){ e.preventDefault(); move(r,c,'left'); }
-        else if(e.key==='ArrowRight' || e.key==='Enter'){ e.preventDefault(); move(r,c,'right'); }
-        else if(e.key==='ArrowUp'){ e.preventDefault(); move(r,c,'up'); }
-        else if(e.key==='ArrowDown'){ e.preventDefault(); move(r,c,'down'); }
-        else if(e.key==='Backspace'){
-          if(this.value){ e.preventDefault(); Store.cells[keyFor(r,c)] = { v:'', b:d.b }; this.value=''; }
-          else { e.preventDefault(); var nc=Math.max(0,c-1); var k=keyFor(r,nc); var prev=Store.cells[k]||{v:'',b:false}; Store.cells[k]={ v:'', b:prev.b }; focusRC(r,nc); }
-        }
-      });
-      cell.addEventListener('click', function(e){
-        // mustaus vain kun lukko pois ja on vuoro
-        var r = parseInt(this.querySelector('input').getAttribute('data-r'),10);
-        var c = parseInt(this.querySelector('input').getAttribute('data-c'),10);
-        var data = Store.cells[keyFor(r,c)]||{v:'',b:false};
-        if(e.altKey && Store.state && !Store.state.lockBlack && canEdit()){
-          Store.cells[keyFor(r,c)] = { v:data.v, b:!data.b }; render();
-        }
-      });
-
-      cell.appendChild(inp);
-      grid.appendChild(cell);
+      inp.addEventListener('input', function(e){ if(!canEdit()) return; var r = parseInt(this.getAttribute('data-r'),10); var c = parseInt(this.getAttribute('data-c'),10); var d = Store.cells[keyFor(r,c)]||{v:'',b:false}; var v=(e.target.value||'').replace(/[^A-Za-zÅÄÖåäö]/g,'').toUpperCase().slice(0,1); e.target.value=v; Store.cells[keyFor(r,c)] = { v: v, b: d.b }; if(v){ move(r,c,'right'); } });
+      inp.addEventListener('keydown', function(e){ var r = parseInt(this.getAttribute('data-r'),10); var c = parseInt(this.getAttribute('data-c'),10); var d = Store.cells[keyFor(r,c)]||{v:'',b:false}; if(!canEdit() && ['ArrowLeft','ArrowRight','ArrowUp','ArrowDown','Backspace','Enter'].indexOf(e.key)!==-1){ e.preventDefault(); return; } if(e.key==='ArrowLeft'){ e.preventDefault(); move(r,c,'left'); } else if(e.key==='ArrowRight' || e.key==='Enter'){ e.preventDefault(); move(r,c,'right'); } else if(e.key==='ArrowUp'){ e.preventDefault(); move(r,c,'up'); } else if(e.key==='ArrowDown'){ e.preventDefault(); move(r,c,'down'); } else if(e.key==='Backspace'){ if(this.value){ e.preventDefault(); Store.cells[keyFor(r,c)] = { v:'', b:d.b }; this.value=''; } else { e.preventDefault(); var nc=Math.max(0,c-1); var k=keyFor(r,nc); var prev=Store.cells[k]||{v:'',b:false}; Store.cells[k]={ v:'', b:prev.b }; focusRC(r,nc); } } });
+      cell.addEventListener('click', function(e){ var r = parseInt(this.querySelector('input').getAttribute('data-r'),10); var c = parseInt(this.querySelector('input').getAttribute('data-c'),10); var data = Store.cells[keyFor(r,c)]||{v:'',b:false}; if(e.altKey && Store.state && !Store.state.lockBlack && canEdit()){ Store.cells[keyFor(r,c)] = { v:data.v, b:!data.b }; render(); } });
+      cell.appendChild(inp); grid.appendChild(cell);
     }
   }
   applyEditability();
@@ -306,312 +195,68 @@ function focusRC(r,c){ var el = document.querySelector('.cell input[data-r="'+r+
 function move(r,c,dir){ if(dir==='left') c=Math.max(0,c-1); if(dir==='right') c=Math.min(N-1,c+1); if(dir==='up') r=Math.max(0,r-1); if(dir==='down') r=Math.min(N-1,r+1); focusRC(r,c); }
 
 /* =========================
-   PILVI – Firebase REST & Snapshotit
+   PILVI – Firebase REST (EI SNAPSHOTEJA)
    ========================= */
+var pollHandle=null;
 var cloudLoadedOnce=false;
 var cloud={
   enabled: mode==='firebase' && dbURL,
   pathRoom: function(){ var base = dbURL+'/rooms/'+encodeURIComponent(room)+'.json'; return authToken ? (base+'?auth='+encodeURIComponent(authToken)) : base; },
-  pathSnapshots: function(){ var base = dbURL+'/rooms/'+encodeURIComponent(room)+'/snapshots.json'; return authToken ? (base+'?auth='+encodeURIComponent(authToken)) : base; },
-  pathSnapshotsChild: function(id){ var base = dbURL+'/rooms/'+encodeURIComponent(room)+'/snapshots/'+id+'.json'; return authToken ? (base+'?auth='+encodeURIComponent(authToken)) : base; },
-
   read: async function(){ var res=await fetch(this.pathRoom()); if(!res.ok) throw new Error('Luku epäonnistui'); return res.json(); },
   write: async function(obj){ var res=await fetch(this.pathRoom(),{ method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify(obj) }); if(!res.ok) throw new Error('Kirjoitus epäonnistui'); return res.json(); },
-
-  readSnapshots: async function(){ var res=await fetch(this.pathSnapshots()); if(!res.ok) throw new Error('Snap-luku epäonnistui'); return res.json(); },
-  appendSnapshot: async function(id,snap){
-    // PATCH snapshots.json kääreellä { [id]: snap } → ei ylikirjoitusta
-    try{ console.log('APPEND → PATCH wrapper to snapshots.json', id, snap && snap.ts); }catch(e){}
-    var payload = {}; payload[id] = snap;
-    var res = await fetch(this.pathSnapshots(),{
-      method:'PATCH',
-      headers:{'Content-Type':'application/json'},
-      body: JSON.stringify(payload)
-    });
-    if(!res.ok) throw new Error('Snap-lisäys (PATCH) epäonnistui');
-    return res.json();
-  },
-  deleteSnapshot: async function(id){ var res=await fetch(this.pathSnapshotsChild(id),{ method:'DELETE' }); if(!res.ok) throw new Error('Snap-poisto epäonnistui'); return true; },
-
-  load: async function(){
-    var data = await this.read(); if(!data) return;
-    Store.cells = data.cells||{}; Store.state = data.state||{lockBlack:true}; Store.players = data.players||{}; Store.active = data.active||null; Store.meta = data.meta||{title:''}; Store.updatedAt = data.updatedAt||0;
-    setHeader(room, Store.meta.title||''); renderPlayersLine(Store.players); setActiveInfoTxt(Store.active ? ('Vuoro: '+Store.active.name) : 'Ei lukkoa');
-    cloudLoadedOnce=true; render(); applyEditability();
-  },
-  saveCurrentOnly: async function(){ var payload = { cells:Store.cells, state:Store.state, players:Store.players, active:Store.active, meta:Store.meta, updatedAt:Date.now() }; await this.write(payload); Store.updatedAt = payload.updatedAt; }
+  load: async function(){ var data=await this.read(); if(!data) return; Store.cells=data.cells||{}; Store.state=data.state||{lockBlack:true}; Store.players=data.players||{}; Store.active=data.active||null; Store.meta=data.meta||{title:''}; Store.updatedAt=data.updatedAt||0; setHeader(room, Store.meta.title||''); renderPlayersLine(Store.players); setActiveInfoTxt(Store.active?('Vuoro: '+Store.active.name):'Ei lukkoa'); cloudLoadedOnce=true; render(); applyEditability(); },
+  saveCurrentOnly: async function(){ var payload={ cells:Store.cells, state:Store.state, players:Store.players, active:Store.active, meta:Store.meta, updatedAt:Date.now() }; await this.write(payload); Store.updatedAt=payload.updatedAt; }
 };
 
-/* =========================
-   SNAPSHOTS – toiminnot
-   ========================= */
-async function saveSnapshot(label){
-  var now = Date.now();
-  var id  = now + '_' + Math.random().toString(36).slice(2,7); // uniikki avain
-
-  var snap = {
-    ts: now,
-    by: Store.myName || '',
-    label: label || ('Luovutus — ' + (Store.myName||'') + ' — ' + fmt(now)),
-    cells: Store.cells,
-    state: Store.state,
-    meta:  Store.meta
-  };
-
-  await cloud.saveCurrentOnly();
-  await cloud.appendSnapshot(id, snap);
-
-  var current = await cloud.readSnapshots() || {};
-  var entries = Object.entries(current).sort(function(a,b){ return ((b[1] && b[1].ts) || 0) - ((a[1] && a[1].ts) || 0); });
-  var extra = entries.slice(SNAPSHOT_LIMIT);
-  for (var i=0; i<extra.length; i++){ await cloud.deleteSnapshot(extra[i][0]); }
-}
+function startPoll(){ if(pollHandle) return; pollHandle=setInterval(async function(){ try{ var data=await cloud.read(); if(!data) return; if(data.updatedAt && data.updatedAt!==Store.updatedAt){ Store.cells=data.cells||{}; Store.state=data.state||{lockBlack:true}; Store.players=data.players||{}; Store.active=data.active||null; Store.meta=data.meta||{title:''}; Store.updatedAt=data.updatedAt; render(); applyEditability(); } else { Store.players=data.players||Store.players; Store.active=data.active||Store.active; } setHeader(room, (data.meta && data.meta.title) || Store.meta.title || ''); renderPlayersLine(Store.players); setActiveInfoTxt(Store.active?('Vuoro: '+Store.active.name):'Ei lukkoa'); }catch(e){} }, 2000); }
 
 /* =========================
    VUORO – kirjautuminen ja lukko
    ========================= */
-if (reconnectBtn) reconnectBtn.addEventListener('click', async function(){
-  setStatus('', 'Yhdistetään Firebaseen…');
-  try{ await cloud.load(); setStatus('ok','Firebase-yhteys OK'); startPoll(); refreshButtons(); applyEditability(); }
-  catch(e){ setStatus('err','Pilviyhteys epäonnistui – tarkista parametrit'); }
-});
 var playerSelect=document.getElementById('playerSelect');
 var takeTurnBtn=document.getElementById('takeTurn');
 var releaseTurnBtn=document.getElementById('releaseTurn');
-var cloudLoadBtn=document.getElementById('cloudLoad');
 var signInBtn=document.getElementById('signIn');
 var quitBtn=document.getElementById('quitApp');
 var sendMsgBtn=document.getElementById('sendMessage');
-var versionsCard=document.getElementById('versionsCard');
-var refreshSnapshotsBtn=document.getElementById('refreshSnapshots');
-var resetSnapshotsBtn=document.getElementById('resetSnapshots');
-var snapshotsList=document.getElementById('snapshotsList');
-var rawSnapshotsLink=document.getElementById('rawSnapshotsLink');
 
-function showVersionsCardIfPekka(){ versionsCard.style.display = (Store.myName==='Pekka' && cloud.enabled) ? 'block' : 'none'; }
-function refreshButtons(){ takeTurnBtn.disabled = !Store.myName || !cloud.enabled; releaseTurnBtn.disabled = !(Store.active && Store.active.name===Store.myName); showVersionsCardIfPekka(); }
+function refreshButtons(){ takeTurnBtn.disabled=!Store.myName||!cloud.enabled; releaseTurnBtn.disabled=!(Store.active && Store.active.name===Store.myName); }
 
-if (lockBlackEl) lockBlackEl.addEventListener('change', function(){ Store.state.lockBlack = !!lockBlackEl.checked; applyEditability(); });
+if (reconnectBtn) reconnectBtn.addEventListener('click', async function(){ setStatus('', 'Yhdistetään Firebaseen…'); try{ await cloud.load(); setStatus('ok','Firebase-yhteys OK'); startPoll(); refreshButtons(); applyEditability(); } catch(e){ setStatus('err','Pilviyhteys epäonnistui – tarkista parametrit'); } });
 
-if (cloudLoadBtn) cloudLoadBtn.addEventListener('click', async function(){
-  if(!cloud.enabled){ alert('Ei pilviyhteyttä: URLiin ?mode=firebase&db=...&room=...'); return; }
-  try{ await cloud.load(); setStatus('ok','Firebase-yhteys OK'); startPoll(); refreshButtons(); applyEditability(); }
-  catch(e){ setStatus('err','Pilvilataus epäonnistui'); }
-});
+if (lockBlackEl) lockBlackEl.addEventListener('change', function(){ Store.state.lockBlack=!!lockBlackEl.checked; applyEditability(); });
 
-if (signInBtn) signInBtn.addEventListener('click', async function(){
-  if(!cloud.enabled){ alert('Ei pilviyhteyttä'); return; }
-  var name = (playerSelect.value || '').trim();
-  if(!name){ alert('Valitse nimesi listasta'); return; }
+if (signInBtn) signInBtn.addEventListener('click', async function(){ if(!cloud.enabled){ alert('Ei pilviyhteyttä'); return; } var name=(playerSelect.value||'').trim(); if(!name){ alert('Valitse nimesi listasta'); return; } Store.myName=name; try{ var data=await cloud.read(); var base=data||{cells:{}, state:{lockBlack:true}, players:{}, active:null, meta:{title:''}, updatedAt:0}; base.players=base.players||{}; base.players[name]=true; base.updatedAt=Date.now(); await cloud.write(base); Store.players=base.players; Store.updatedAt=base.updatedAt; renderPlayersLine(Store.players); refreshButtons(); applyEditability(); } catch(e){ alert('Kirjautuminen epäonnistui'); } });
 
-  Store.myName = name;
-  try{
-    var data = await cloud.read();
-    var base = data || {cells:{}, state:{lockBlack:true}, players:{}, active:null, meta:{title:''}, updatedAt:0};
-    base.players = base.players || {}; base.players[name] = true; base.updatedAt = Date.now();
-    await cloud.write(base);
+async function writeActive(to){ try{ var data=await cloud.read(); var base=data||{cells:{},state:{lockBlack:true},players:{},meta:{title:Store.meta.title||''}}; base.active=to; base.updatedAt=Date.now(); await cloud.write(base); Store.active=to; Store.updatedAt=base.updatedAt; Store.meta=base.meta; setHeader(room, Store.meta.title||''); setActiveInfoTxt(Store.active?('Vuoro: '+Store.active.name):'Ei lukkoa'); applyEditability(); } catch(e){ alert('Vuoron kirjaus epäonnistui'); } }
 
-    Store.players = base.players; Store.updatedAt = base.updatedAt;
-    renderPlayersLine(Store.players); refreshButtons(); applyEditability();
+takeTurnBtn?.addEventListener('click', async function(){ if(!Store.myName){ alert('Kirjaudu ensin'); return; } if(!cloud.enabled){ alert('Pilvimoodi ei ole käytössä'); return; } await writeActive({ name:Store.myName, since:Date.now() }); refreshButtons(); });
 
-    // Päivitä apulinkki raakaan JSONiin
-    var raw = cloud.pathSnapshots(); rawSnapshotsLink.href = raw; rawSnapshotsLink.style.display = 'inline-block';
-  } catch(e){ alert('Kirjautuminen epäonnistui'); }
-});
+releaseTurnBtn?.addEventListener('click', async function(){ if(Store.active && Store.active.name!==Store.myName){ alert('Vuoro on '+Store.active.name); return; } if(!cloud.enabled){ alert('Pilvimoodi ei ole käytössä'); return; } try{ await cloud.saveCurrentOnly(); }catch(e){ alert('Tallennus epäonnistui'); return; } await writeActive(null); refreshButtons(); applyEditability(); });
 
-async function writeActive(to){
-  try{
-    var data = await cloud.read();
-    var base = data || {cells:{},state:{lockBlack:true},players:{},meta:{title: Store.meta.title||''}};
-    base.active = to; base.updatedAt = Date.now();
-    await cloud.write(base);
-    Store.active = to; Store.updatedAt = base.updatedAt; Store.meta = base.meta;
-    setHeader(room, Store.meta.title||''); setActiveInfoTxt(Store.active? ('Vuoro: '+Store.active.name) : 'Ei lukkoa'); applyEditability();
-  } catch(e){ alert('Vuoron kirjaus epäonnistui'); }
-}
-
-if (takeTurnBtn) takeTurnBtn.addEventListener('click', async function(){
-  if(!Store.myName){ alert('Kirjaudu ensin'); return; }
-  if(!cloud.enabled){ alert('Pilvimoodi ei ole käytössä'); return; }
-  await writeActive({ name: Store.myName, since: Date.now() });
-  refreshButtons();
-});
-
-if (releaseTurnBtn) releaseTurnBtn.addEventListener('click', async function(){
-  if(Store.active && Store.active.name!==Store.myName){ alert('Vuoro on '+Store.active.name); return; }
-  if(!cloud.enabled){ alert('Pilvimoodi ei ole käytössä'); return; }
-  try{ await saveSnapshot('Luovutus — '+(Store.myName||'')+' — '+fmt(Date.now())); }catch(e){ alert('Tallennus ennen luovutusta epäonnistui'); return; }
-  await writeActive(null); refreshButtons(); applyEditability();
-  if (refreshSnapshotsBtn) try{ await refreshSnapshotsBtn.click(); }catch(e){}
-});
-
-if (quitBtn) quitBtn.addEventListener('click', async function(){
-  if(!Store.myName){ return; }
-  try{
-    var data = await cloud.read();
-    var base = data || {cells:{}, state:{lockBlack:true}, players:{}, active:null, meta:{title:''}, updatedAt:0};
-
-    if(base.active && base.active.name === Store.myName){
-      await saveSnapshot('Lopetus — '+Store.myName+' — '+fmt(Date.now()));
-      base.active = null;
-    }
-    if(base.players && base.players[Store.myName]){ delete base.players[Store.myName]; }
-    base.updatedAt = Date.now();
-    await cloud.write(base);
-
-    Store.players = base.players || {}; Store.active = base.active || null;
-    setActiveInfoTxt(Store.active? ('Vuoro: '+Store.active.name) : 'Ei lukkoa'); renderPlayersLine(Store.players);
-    Store.myName = ''; playerSelect.value = ''; refreshButtons(); applyEditability();
-  } catch(e){ alert('Uloskirjautuminen epäonnistui'); }
-});
-
-function renderSnapshotsList(snapshotsObj){
-  if(!snapshotsObj || Object.keys(snapshotsObj).length===0){
-    snapshotsList.innerHTML = '<span class="muted">Ei tallennuksia vielä.</span>';
-    return;
-  }
-  var arr = Object.entries(snapshotsObj).map(function(pair){ return { id: pair[0], ts: (pair[1] && pair[1].ts)||0, by: (pair[1] && pair[1].by)||'', label: (pair[1] && pair[1].label)||'Tallennus', cells: (pair[1] && pair[1].cells)||{}, state: (pair[1] && pair[1].state)||{}, meta: (pair[1] && pair[1].meta)||{} }; });
-  arr.sort(function(a,b){ return (b.ts||0)-(a.ts||0); });
-  snapshotsList.innerHTML = '';
-  for (var i=0;i<arr.length;i++){
-    var sn = arr[i];
-    var row = document.createElement('div');
-    row.style.display='flex'; row.style.justifyContent='space-between'; row.style.alignItems='center';
-    row.style.padding='6px 0'; row.style.borderBottom='1px solid #e5e7eb';
-
-    var left = document.createElement('div');
-    left.innerHTML = '<div><b>'+sn.label+'</b></div><div class="muted">'+fmt(sn.ts)+' — '+(sn.by||'')+'</div>';
-
-    var btn = document.createElement('button');
-    btn.textContent = 'Palauta';
-    (function(snInner){
-      btn.addEventListener('click', async function(){
-        if(!cloud.enabled){ alert('Ei pilviyhteyttä'); return; }
-        if(!confirm('Palautetaanko tallennus:\n'+(snInner.label||fmt(snInner.ts))+' ?')) return;
-        try{
-          var base = await cloud.read() || {};
-          base.cells = snInner.cells || {};
-          base.state = snInner.state || {lockBlack:true};
-          base.meta  = snInner.meta  || base.meta || {};
-          base.updatedAt = Date.now();
-          await cloud.write(base);
-          Store.cells = base.cells; Store.state = base.state; Store.meta = base.meta; Store.updatedAt = base.updatedAt;
-          render(); applyEditability(); alert('Versio palautettu käyttöön.');
-        } catch(e){ alert('Palautus epäonnistui'); }
-      });
-    })(sn);
-
-    row.appendChild(left); row.appendChild(btn); snapshotsList.appendChild(row);
-  }
-}
-
-if (refreshSnapshotsBtn) refreshSnapshotsBtn.addEventListener('click', async function(){
-  try{ var snaps = await cloud.readSnapshots(); renderSnapshotsList(snaps); }catch(e){ alert('Tallennuslistan haku epäonnistui'); }
-});
-if (resetSnapshotsBtn) resetSnapshotsBtn.addEventListener('click', async function(){
-  if(!cloud.enabled){ alert('Ei pilviyhteyttä'); return; }
-  if(!confirm('Tyhjennetäänkö kaikki tallennukset (snapshots)?')) return;
-  try{ var base = cloud.pathSnapshots(); await fetch(base, { method:'DELETE' }); if (refreshSnapshotsBtn) await refreshSnapshotsBtn.click(); alert('Tallennukset tyhjennetty.'); }catch(e){ alert('Tyhjennys epäonnistui'); }
-});
+quitBtn?.addEventListener('click', async function(){ if(!Store.myName){ return; } try{ var data=await cloud.read(); var base=data||{cells:{}, state:{lockBlack:true}, players:{}, active:null, meta:{title:''}, updatedAt:0}; if(base.active && base.active.name===Store.myName){ await cloud.saveCurrentOnly(); base.active=null; } if(base.players && base.players[Store.myName]){ delete base.players[Store.myName]; } base.updatedAt=Date.now(); await cloud.write(base); Store.players=base.players||{}; Store.active=base.active||null; setActiveInfoTxt(Store.active?('Vuoro: '+Store.active.name):'Ei lukkoa'); renderPlayersLine(Store.players); Store.myName=''; playerSelect.value=''; refreshButtons(); applyEditability(); } catch(e){ alert('Uloskirjautuminen epäonnistui'); } });
 
 /* =========================
    PAIKALLINEN JSON – tallenna/lataa
    ========================= */
-document.getElementById('save').addEventListener('click', function(){
-  var out = { n: N, cells: Store.cells, state: Store.state, meta: Store.meta, updatedAt: Store.updatedAt || Date.now() };
-  var blob = new Blob([JSON.stringify(out)], {type:'application/json'});
-  var a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='ristikko-'+room+'.json'; a.click(); URL.revokeObjectURL(a.href);
-});
+document.getElementById('save').addEventListener('click', function(){ var out={ n:N, cells:Store.cells, state:Store.state, meta:Store.meta, updatedAt:Store.updatedAt||Date.now() }; var blob=new Blob([JSON.stringify(out)],{type:'application/json'}); var a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='ristikko-'+room+'.json'; a.click(); URL.revokeObjectURL(a.href); });
 var loadInput=document.getElementById('load');
 document.getElementById('loadBtn').addEventListener('click', function(){ loadInput.click(); });
-loadInput.addEventListener('change', function(){
-  if(loadInput.files[0]){
-    var reader=new FileReader();
-    reader.onload=function(){
-      try{
-        var data=JSON.parse(reader.result);
-        if(!data||!data.cells) throw new Error('Virheellinen tiedosto');
-        Store.cells=data.cells; if(data.state) Store.state=data.state; if(data.meta) Store.meta=data.meta; if(data.updatedAt) Store.updatedAt=data.updatedAt;
-        setHeader(room, Store.meta.title || ''); render(); applyEditability();
-      } catch(e){ alert('Lataus epäonnistui: '+e.message); }
-    };
-    reader.readAsText(loadInput.files[0]);
-  }
-});
+loadInput.addEventListener('change', function(){ if(loadInput.files[0]){ var reader=new FileReader(); reader.onload=function(){ try{ var data=JSON.parse(reader.result); if(!data||!data.cells) throw new Error('Virheellinen tiedosto'); Store.cells=data.cells; if(data.state) Store.state=data.state; if(data.meta) Store.meta=data.meta; if(data.updatedAt) Store.updatedAt=data.updatedAt; setHeader(room, Store.meta.title||''); render(); applyEditability(); } catch(e){ alert('Lataus epäonnistui: '+e.message); } }; reader.readAsText(loadInput.files[0]); } });
 
-document.getElementById('clear').addEventListener('click', function(){
-  if(confirm('Tyhjennetäänkö koko ristikko tältä huoneelta?')){ Store.cells={}; render(); applyEditability(); }
-});
+document.getElementById('clear').addEventListener('click', function(){ if(confirm('Tyhjennetäänkö koko ristikko tältä huoneelta?')){ Store.cells={}; render(); applyEditability(); } });
 
 /* =========================
    LINKKIGENERAATTORI
    ========================= */
 var roomNameEl=document.getElementById('roomName'); var roomTitleEl=document.getElementById('roomTitle'); var roomLink=document.getElementById('roomLink');
-async function createRoomInCloud(name,title){
-  if(!dbURL){ alert('Lisää URL-parametrit: ?mode=firebase&db=...'); return; }
-  var pathBase = dbURL.replace(/\/$/,'')+'/rooms/'+encodeURIComponent(name)+'.json';
-  var baseURL = authToken ? (pathBase+'?auth='+encodeURIComponent(authToken)) : pathBase;
-  try{
-    var cur = await fetch(baseURL); var curData = cur.ok? await cur.json() : null;
-    var payload = curData || { cells:{}, state:{lockBlack:true}, players:{}, active:null, meta:{title:''}, updatedAt:0 };
-    payload.meta.title = title||payload.meta.title||'';
-    if(!curData){ payload.updatedAt = Date.now(); }
-    await fetch(baseURL, { method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) });
-  } catch(e){ alert('Huoneen luonti pilveen epäonnistui'); }
-}
-document.getElementById('makeLink').addEventListener('click', async function(){
-  var name = (roomNameEl.value || room).trim();
-  var title = (roomTitleEl.value || '').trim();
-  if(mode==='firebase' && dbURL){ await createRoomInCloud(name, title); }
-  var url = new URL(location.href); url.searchParams.set('room', name); url.searchParams.set('mode','firebase'); url.searchParams.set('db', dbURL);
-  if(authToken) url.searchParams.set('auth', authToken);
-  roomLink.href = url.toString(); roomLink.style.display='inline'; roomLink.textContent='Avaa huone: '+name+(title? ' — '+title : '');
-});
-
-/* =========================
-   POLL – huonepäivitysten seuranta
-   ========================= */
-var pollHandle=null;
-function startPoll(){
-  if(pollHandle) return;
-  pollHandle = setInterval(async function(){
-    try{
-      var data = await cloud.read(); if(!data) return;
-      if(data.updatedAt && data.updatedAt !== Store.updatedAt){
-        Store.cells = data.cells||{}; Store.state = data.state||{lockBlack:true};
-        Store.players = data.players||{};
-        Store.active = data.active||null; Store.meta = data.meta||{title:''}; Store.updatedAt = data.updatedAt;
-        render(); applyEditability();
-      } else {
-        Store.players = data.players||Store.players;
-        Store.active = data.active||Store.active;
-      }
-      setHeader(room, (data.meta && data.meta.title) || Store.meta.title || '');
-      renderPlayersLine(Store.players);
-      setActiveInfoTxt(Store.active? ('Vuoro: '+Store.active.name) : 'Ei lukkoa');
-      showVersionsCardIfPekka();
-    } catch(e){}
-  }, 2000);
-}
+async function createRoomInCloud(name,title){ if(!dbURL){ alert('Lisää URL-parametrit: ?mode=firebase&db=...'); return; } var pathBase = dbURL.replace(/\/$/,'')+'/rooms/'+encodeURIComponent(name)+'.json'; var baseURL = authToken ? (pathBase+'?auth='+encodeURIComponent(authToken)) : pathBase; try{ var cur=await fetch(baseURL); var curData=cur.ok?await cur.json():null; var payload=curData||{ cells:{}, state:{lockBlack:true}, players:{}, active:null, meta:{title:''}, updatedAt:0 }; payload.meta.title=title||payload.meta.title||''; if(!curData){ payload.updatedAt=Date.now(); } await fetch(baseURL,{ method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload) }); } catch(e){ alert('Huoneen luonti pilveen epäonnistui'); } }
+document.getElementById('makeLink').addEventListener('click', async function(){ var name=(roomNameEl.value||room).trim(); var title=(roomTitleEl.value||'').trim(); if(mode==='firebase' && dbURL){ await createRoomInCloud(name,title); } var url=new URL(location.href); url.searchParams.set('room',name); url.searchParams.set('mode','firebase'); url.searchParams.set('db',dbURL); if(authToken) url.searchParams.set('auth',authToken); roomLink.href=url.toString(); roomLink.style.display='inline'; roomLink.textContent='Avaa huone: '+name+(title? ' — '+title : ''); });
 
 /* =========================
    INIT
    ========================= */
-(function init(){
-  lockBlackEl.checked = !!Store.state.lockBlack;
-  setHeader(room, '');
-  render(); applyEditability();
-  if (mode==='firebase' && dbURL) {
-    if (reconnectBtn) reconnectBtn.style.display='inline-block';
-    setStatus('', 'Yhdistetään Firebaseen…');
-    cloud.load().then(function(){
-      setStatus('ok','Firebase-yhteys OK');
-      startPoll(); refreshButtons(); applyEditability();
-    }).catch(function(){ setStatus('err','Pilviyhteys epäonnistui – paina "Yhdistä"'); });
-  } else {
-    setStatus('', 'Offline-tila (paikallinen)');
-  }
-})();
+(function init(){ lockBlackEl.checked=!!Store.state.lockBlack; setHeader(room, ''); render(); applyEditability(); if (mode==='firebase' && dbURL){ if(reconnectBtn) reconnectBtn.style.display='inline-block'; setStatus('', 'Yhdistetään Firebaseen…'); cloud.load().then(function(){ setStatus('ok','Firebase-yhteys OK'); startPoll(); refreshButtons(); applyEditability(); }).catch(function(){ setStatus('err','Pilviyhteys epäonnistui – paina "Yhdistä"'); }); } else { setStatus('', 'Offline-tila (paikallinen)'); } })();
 </script>
 </body>
 </html>
