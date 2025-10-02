@@ -129,9 +129,14 @@
       <div style="font-weight:600; margin-bottom:8px;">Pelaa Firebase-pilvessä</div>
 
       <!-- Alasvetovalikko: otsikko 'Valitse nimesi' (ei esitäytettyjä nimiä) -->
-      <select id="playerSelect" style="width:100%; margin-bottom:10px;">
-        <option value="">— Valitse nimesi —</option>
-      </select>
+<select id="playerSelect" style="width:100%; margin-bottom:10px;">
+  <option value="">— Valitse nimesi —</option>
+  <option>Enni</option><option>Esme</option><option>Marika</option>
+  <option>Mauri</option><option>Mirva</option><option>Pekka</option>
+  <option>Pertti</option><option>Petri</option><option>Sini</option>
+  <option>Taru</option><option>Teemu</option>
+</select>
+
 
       <!-- Ylärivi -->
       <div class="btn-row" style="margin-bottom:8px;">
@@ -189,7 +194,13 @@ const Store = {
   updatedAt:0
 };
 
-function canEdit(){ return !!(Store.active && Store.active.name === Store.myName); }
+function canEdit(){
+  // Offline-tilassa ja ilman pilveä saa muokata vapaasti
+  if (!cloud.enabled) return true;
+  // Pilvessä vain vuoronhaltija saa muokata
+  return !!(Store.active && Store.active.name === Store.myName);
+}
+
 function applyEditability(){ grid.classList.toggle('disabled-overlay', !canEdit()); }
 
 // Piirto
