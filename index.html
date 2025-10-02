@@ -323,58 +323,98 @@ let cloudLoadedOnce = false;
 
 const cloud = {
   enabled: mode==='firebase' && dbURL,
+
   pathRoom(){
     const base = `${dbURL}/rooms/${encodeURIComponent(room)}.json`;
     return authToken ? `${base}?auth=${encodeURIComponent(authToken)}` : base;
   },
+
+  // Snapshottien juuripolku
   pathSnapshots(){
     const base = `${dbURL}/rooms/${encodeURIComponent(room)}/snapshots.json`;
     return authToken ? `${base}?auth=${encodeURIComponent(authToken)}` : base;
   },
+
+  // Yksittäinen snapshot (id = ts)
+  pathSnapshotsChild(id){
+    const base = `${dbURL}/rooms/${encodeURIComponent(room)}/snapshots/${id}.json`;
+    return authToken ? `${base}?auth=${encodeURIComponent(authToken)}` : base;
+  },
+
+  // Huoneen lukeminen/kirjoittaminen
   async read(){
     const res = await fetch(this.pathRoom());
     if(!res.ok) throw new Error('Luku epäonnistui');
     return res.json();
   },
+
   async write(obj){
     const res = await fetch(this.pathRoom(), {
-      method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(obj)
+      method:'PUT',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify(obj)
     });
     if(!res.ok) throw new Error('Kirjoitus epäonnistui');
     return res.json();
   },
+
+  // Snapshotit: luku, lisäys (PATCH), poisto
   async readSnapshots(){
     const res = await fetch(this.pathSnapshots());
     if(!res.ok) throw new Error('Snap-luku epäonnistui');
     return res.json();
   },
-  async writeSnapshots(obj){
+
+  async appendSnapshot(id, snap){
     const res = await fetch(this.pathSnapshots(), {
-      method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(obj||{}) });
-    if(!res.ok) throw new Error('Snap-kirjoitus epäonnistui');
+      method:'PATCH',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ [id]: snap })
+    });
+    if(!res.ok) throw new Error('Snap-lisäys epäonnistui');
     return res.json();
   },
+
+  async deleteSnapshot(id){
+    const res = await fetch(this.pathSnapshotsChild(id), { method:'DELETE' });
+    if(!res.ok) throw new Error('Snap-poisto epäonnistui');
+    return true;
+  },
+
+  // Huoneen lataus (päivittää paikallisen tilan)
   async load(){
     const data = await this.read(); if(!data) return;
-    Store.cells = data.cells||{}; Store.state = data.state||{lockBlack:true};
-    Store.players = data.players||{};
-    Store.active = data.active||null; Store.updatedAt = data.updatedAt||0; Store.meta = data.meta||{title:''};
+    Store.cells   = data.cells || {};
+    Store.state   = data.state || {lockBlack:true};
+    Store.players = data.players || {};
+    Store.active  = data.active || null;
+    Store.meta    = data.meta || {title:''};
+    Store.updatedAt = data.updatedAt || 0;
+
     setHeader(room, Store.meta.title || '');
     renderPlayersLine(Store.players);
-    setActiveInfoTxt(Store.active? `Vuoro: ${Store.active.name}` : 'Ei lukkoa');
+    setActiveInfoTxt(Store.active ? `Vuoro: ${Store.active.name}` : 'Ei lukkoa');
+
     cloudLoadedOnce = true;
     render();
-    applyEditability(); // tärkeä: disabloi inputit jos ei ole vuoroa
+    applyEditability(); // disabloi inputit jos ei ole vuoroa
   },
+
+  // Kirjoita tämänhetkinen huonetila (ei snapshot-listaa)
   async saveCurrentOnly(){
     const payload = {
-      cells:Store.cells, state:Store.state, players:Store.players,
-      active:Store.active, meta:Store.meta, updatedAt: Date.now()
+      cells: Store.cells,
+      state: Store.state,
+      players: Store.players,
+      active: Store.active,
+      meta: Store.meta,
+      updatedAt: Date.now()
     };
     await this.write(payload);
     Store.updatedAt = payload.updatedAt;
   }
 };
+
 
 // UI-elementit
 const playerSelect = document.getElementById('playerSelect');
@@ -518,34 +558,32 @@ takeTurnBtn?.addEventListener('click', async ()=>{
   await writeActive({ name: Store.myName, since: Date.now() });
   refreshButtons();
 });
-
 async function saveSnapshot(label){
-  // Luo snapshot-objekti
+  const now = Date.now();
   const snap = {
-    ts: Date.now(),
+    ts: now,
     by: Store.myName || '',
-    label: label || `Luovutus — ${Store.myName||''} — ${fmt(Date.now())}`,
+    label: label || `Luovutus — ${Store.myName||''} — ${fmt(now)}`,
     cells: Store.cells,
     state: Store.state,
     meta:  Store.meta
   };
 
-  // 1) Tallenna nykyinen tila huoneeseen
+  // 1) Tallenna nykyinen huonetila (varsinainen "live"-tila)
   await cloud.saveCurrentOnly();
 
-  // 2) Lue vanhat snapshotit, lisää uusi, siivoa > LIMIT
+  // 2) Lisää snapshot ilman ylikirjoitusta
+  await cloud.appendSnapshot(snap.ts, snap);
+
+  // 3) Siivoa vanhimmat yli rajan
   const current = await cloud.readSnapshots() || {};
-  const merged = { ...current, [snap.ts]: snap };
-
-  // Pidä vain uusimmat SNAPSHOT_LIMIT
-  const ids = Object.keys(merged).map(k=>+k).sort((a,b)=>b-a);
-  const keep = ids.slice(0, SNAPSHOT_LIMIT);
-  const pruned = {};
-  keep.forEach(id=>{ pruned[id] = merged[id]; });
-
-  // Kirjoita takaisin
-  await cloud.writeSnapshots(pruned);
+  const ids = Object.keys(current).map(k=>+k).sort((a,b)=>b-a); // uusin ensin
+  const extra = ids.slice(SNAPSHOT_LIMIT); // kaikki jotka menevät rajan yli
+  for(const id of extra){
+    await cloud.deleteSnapshot(id);
+  }
 }
+
 
 releaseTurnBtn?.addEventListener('click', async ()=>{
   if(Store.active && Store.active.name!==Store.myName){ alert(`Vuoro on ${Store.active.name}`); return; }
