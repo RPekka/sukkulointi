@@ -70,6 +70,13 @@
     text-align:center; font-weight:800; font-size:18px; text-transform:uppercase;
     background:transparent; border:none; color:#0b1116; outline:none;
   }
+      .cell input:disabled {
+  opacity: 1;
+  color: #0b1116;
+  background: transparent;
+  /* halutessasi: cursor: not-allowed; */
+}
+
   .cell.black{ background:#0f1720; border-color:#0f1720; }
   .cell.black input{ visibility:hidden; pointer-events:none; }
   .cell.black::after{ content:""; position:absolute; inset:0; border-radius:6px;
@@ -201,7 +208,23 @@ function canEdit(){
   return !!(Store.active && Store.active.name === Store.myName);
 }
 
-function applyEditability(){ grid.classList.toggle('disabled-overlay', !canEdit()); }
+function applyEditability(){
+  const editable = canEdit();
+
+  // ÄLÄ enää tummenna ruudukkoa
+  grid.classList.remove('disabled-overlay');
+
+  // Estä muokkaus ilman vuoroa, mutta pidä ulkoasu vaaleana
+  document.querySelectorAll('.cell input').forEach(inp=>{
+    if (editable) {
+      inp.removeAttribute('disabled');
+      inp.style.cursor = '';
+    } else {
+      inp.setAttribute('disabled','true');
+      inp.style.cursor = 'not-allowed';
+    }
+  });
+}
 
 // Piirto
 function render(){
