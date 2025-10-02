@@ -1,5 +1,5 @@
 <!doctype html>
-<!-- Version 15 -->
+<!-- Version 16 -->
 <html lang="fi">
 <head>
 <meta charset="utf-8" />
@@ -181,8 +181,7 @@ var room = (params.get('room')||'POP1').trim();
 var dbURL = (params.get('db')||'').replace(/\/$/, '');
 var authToken = (params.get('auth')||'').trim(); // valinnainen
 
-// ===== AUTOMAATTINEN PILVIMOODI, JOS URL-PARAMETREJA EI OLE =====
-// (poistaa "Ristikko on offline" -tilanteen kun avaat sivun ilman parametreja)
+// (valinnainen fallback – ei vaikuta kun käytät parametreja)
 if (!params.get('mode')) { mode = 'firebase'; }
 if (!dbURL) { dbURL = 'https://sukkulointi-default-rtdb.europe-west1.firebasedatabase.app'; }
 
@@ -541,7 +540,7 @@ document.getElementById('clear').addEventListener('click', function(){
 var roomNameEl=document.getElementById('roomName'); var roomTitleEl=document.getElementById('roomTitle'); var roomLink=document.getElementById('roomLink');
 async function createRoomInCloud(name,title){
   if(!dbURL){ alert('Lisää URL-parametrit: ?mode=firebase&db=...'); return; }
-  var pathBase = dbURL.replace(/\/$,'')+'/rooms/'+encodeURIComponent(name)+'.json';
+  var pathBase = dbURL.replace(/\/$/,'')+'/rooms/'+encodeURIComponent(name)+'.json';  /* <- FIX */
   var baseURL = authToken ? (pathBase+'?auth='+encodeURIComponent(authToken)) : pathBase;
   try{
     var cur = await fetch(baseURL); var curData = cur.ok? await cur.json() : null;
