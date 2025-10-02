@@ -1,5 +1,5 @@
 <!doctype html>
-<!-- Version 16 (snapshot fix: PATCH wrapper) -->
+<!-- Version 16 -->
 <html lang="fi">
 <head>
 <meta charset="utf-8" />
@@ -95,7 +95,7 @@
     <h1 id="title">Sanaristikko</h1>
     <div class="subhint">Klikkaa ruutua ja lisää kirjain. Ristikon huone on nettiosoitteen lopussa, Pekka lähettää linkin.</div>
 
-    <div class="status"><span id="statusDot" class="dot"></span><span id="statusText">Offline-tila (paikallinen)</span><span id="activeInfo" class="muted"></span><button id="reconnect" style="margin-left:auto;display:none;">Yhdistä</button></div>
+    <div class="status"><span id="statusDot" class="dot"></span><span id="statusText">Offline-tila (paikallinen)</span><span id="activeInfo" class="muted"></span></div>
 
     <!-- Pelaajaluettelo -->
     <div id="playersLine" class="players-line" aria-live="polite"></div>
@@ -181,8 +181,7 @@ var room = (params.get('room')||'POP1').trim();
 var dbURL = (params.get('db')||'').replace(/\/$/, '');
 var authToken = (params.get('auth')||'').trim(); // valinnainen
 
-// ===== AUTOMAATTINEN PILVIMOODI, JOS URL-PARAMETREJA EI OLE =====
-// (poistaa "Ristikko on offline" -tilanteen kun avaat sivun ilman parametreja)
+// (valinnainen fallback – ei vaikuta kun käytät parametreja)
 if (!params.get('mode')) { mode = 'firebase'; }
 if (!dbURL) { dbURL = 'https://sukkulointi-default-rtdb.europe-west1.firebasedatabase.app'; }
 
@@ -190,7 +189,7 @@ if (!dbURL) { dbURL = 'https://sukkulointi-default-rtdb.europe-west1.firebasedat
 var titleEl = document.getElementById('title');
 var playersLineEl = document.getElementById('playersLine');
 function setHeader(roomName, title){ titleEl.textContent = 'Sanaristikko '+roomName.toUpperCase()+ (title? ' — '+title : ''); }
-var statusDot = document.getElementById('statusDot'); var statusText = document.getElementById('statusText'); var activeInfo = document.getElementById('activeInfo'); var reconnectBtn = document.getElementById('reconnect');
+var statusDot = document.getElementById('statusDot'); var statusText = document.getElementById('statusText'); var activeInfo = document.getElementById('activeInfo');
 function setStatus(cls, msg){ statusDot.classList.remove('ok','err'); if(cls) statusDot.classList.add(cls); statusText.textContent = msg; }
 function setActiveInfoTxt(txt){ activeInfo.textContent = txt? ' — '+txt : ''; }
 function renderPlayersLine(playersObj){
@@ -320,17 +319,10 @@ var cloud={
 
   readSnapshots: async function(){ var res=await fetch(this.pathSnapshots()); if(!res.ok) throw new Error('Snap-luku epäonnistui'); return res.json(); },
   appendSnapshot: async function(id,snap){
-    // PATCH snapshots.json kääreellä { [id]: snap } → ei ylikirjoitusta
-    try{ console.log('APPEND → PATCH wrapper to snapshots.json', id, snap && snap.ts); }catch(e){}
-    var payload = {}; payload[id] = snap;
-    var res = await fetch(this.pathSnapshots(),{
-      method:'PATCH',
-      headers:{'Content-Type':'application/json'},
-      body: JSON.stringify(payload)
-    });
-    if(!res.ok) throw new Error('Snap-lisäys (PATCH) epäonnistui');
-    return res.json();
-  }, body: JSON.stringify(snap)
+    // DIAG: tulostetaan lapsi-avaimeen tehtävä PUT
+    try{ console.log('APPEND → PUT child:', id, snap && snap.ts); }catch(e){}
+    var res=await fetch(this.pathSnapshotsChild(id),{
+      method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(snap)
     });
     if(!res.ok) throw new Error('Snap-lisäys epäonnistui');
     return res.json();
@@ -374,11 +366,6 @@ async function saveSnapshot(label){
 /* =========================
    VUORO – kirjautuminen ja lukko
    ========================= */
-if (reconnectBtn) reconnectBtn.addEventListener('click', async function(){
-  setStatus('', 'Yhdistetään Firebaseen…');
-  try{ await cloud.load(); setStatus('ok','Firebase-yhteys OK'); startPoll(); refreshButtons(); applyEditability(); }
-  catch(e){ setStatus('err','Pilviyhteys epäonnistui – tarkista parametrit'); }
-});
 var playerSelect=document.getElementById('playerSelect');
 var takeTurnBtn=document.getElementById('takeTurn');
 var releaseTurnBtn=document.getElementById('releaseTurn');
@@ -553,7 +540,7 @@ document.getElementById('clear').addEventListener('click', function(){
 var roomNameEl=document.getElementById('roomName'); var roomTitleEl=document.getElementById('roomTitle'); var roomLink=document.getElementById('roomLink');
 async function createRoomInCloud(name,title){
   if(!dbURL){ alert('Lisää URL-parametrit: ?mode=firebase&db=...'); return; }
-  var pathBase = dbURL.replace(/\/$,'')+'/rooms/'+encodeURIComponent(name)+'.json';
+  var pathBase = dbURL.replace(/\/$/,'')+'/rooms/'+encodeURIComponent(name)+'.json';  /* <- FIX */
   var baseURL = authToken ? (pathBase+'?auth='+encodeURIComponent(authToken)) : pathBase;
   try{
     var cur = await fetch(baseURL); var curData = cur.ok? await cur.json() : null;
@@ -605,16 +592,7 @@ function startPoll(){
   lockBlackEl.checked = !!Store.state.lockBlack;
   setHeader(room, '');
   render(); applyEditability();
-  if (mode==='firebase' && dbURL) {
-    if (reconnectBtn) reconnectBtn.style.display='inline-block';
-    setStatus('', 'Yhdistetään Firebaseen…');
-    cloud.load().then(function(){
-      setStatus('ok','Firebase-yhteys OK');
-      startPoll(); refreshButtons(); applyEditability();
-    }).catch(function(){ setStatus('err','Pilviyhteys epäonnistui – paina "Yhdistä"'); });
-  } else {
-    setStatus('', 'Offline-tila (paikallinen)');
-  }
+  if(mode==='firebase' && dbURL){ setStatus('', 'Valmis Firebaseen – paina "Lataa pilvestä"'); } else { setStatus('', 'Offline-tila (paikallinen)'); }
 })();
 </script>
 </body>
