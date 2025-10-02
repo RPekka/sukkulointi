@@ -185,7 +185,21 @@ function render(){ grid.innerHTML='';
       inp.setAttribute('inputmode','latin'); inp.setAttribute('autocomplete','off'); inp.setAttribute('autocapitalize','off'); inp.setAttribute('autocorrect','off'); inp.setAttribute('spellcheck','false'); inp.setAttribute('aria-label','Rivi '+(rr+1)+', Sarake '+(cc+1));
       inp.addEventListener('input', function(e){ if(!canEdit()) return; var r = parseInt(this.getAttribute('data-r'),10); var c = parseInt(this.getAttribute('data-c'),10); var d = Store.cells[keyFor(r,c)]||{v:'',b:false}; var v=(e.target.value||'').replace(/[^A-Za-zÅÄÖåäö]/g,'').toUpperCase().slice(0,1); e.target.value=v; Store.cells[keyFor(r,c)] = { v: v, b: d.b }; if(v){ move(r,c,'right'); } });
       inp.addEventListener('keydown', function(e){ var r = parseInt(this.getAttribute('data-r'),10); var c = parseInt(this.getAttribute('data-c'),10); var d = Store.cells[keyFor(r,c)]||{v:'',b:false}; if(!canEdit() && ['ArrowLeft','ArrowRight','ArrowUp','ArrowDown','Backspace','Enter'].indexOf(e.key)!==-1){ e.preventDefault(); return; } if(e.key==='ArrowLeft'){ e.preventDefault(); move(r,c,'left'); } else if(e.key==='ArrowRight' || e.key==='Enter'){ e.preventDefault(); move(r,c,'right'); } else if(e.key==='ArrowUp'){ e.preventDefault(); move(r,c,'up'); } else if(e.key==='ArrowDown'){ e.preventDefault(); move(r,c,'down'); } else if(e.key==='Backspace'){ if(this.value){ e.preventDefault(); Store.cells[keyFor(r,c)] = { v:'', b:d.b }; this.value=''; } else { e.preventDefault(); var nc=Math.max(0,c-1); var k=keyFor(r,nc); var prev=Store.cells[k]||{v:'',b:false}; Store.cells[k]={ v:'', b:prev.b }; focusRC(r,nc); } } });
-      cell.addEventListener('click', function(e){ var r = parseInt(this.querySelector('input').getAttribute('data-r'),10); var c = parseInt(this.querySelector('input').getAttribute('data-c'),10); var data = Store.cells[keyFor(r,c)]||{v:'',b:false}; if(e.altKey && Store.state && !Store.state.lockBlack && canEdit()){ Store.cells[keyFor(r,c)] = { v:data.v, b:!data.b }; render(); } });
+      cell.addEventListener('click', function(e){
+  // estä vahinkomustaus: vaadi Alt, mutta EI AltGr/Ctrl/Meta
+  var r = parseInt(this.querySelector('input').getAttribute('data-r'),10);
+  var c = parseInt(this.querySelector('input').getAttribute('data-c'),10);
+  var data = Store.cells[keyFor(r,c)] || { v:'', b:false };
+
+  if (
+    e.altKey && !e.ctrlKey && !e.metaKey &&           // Alt kyllä, mutta EI AltGr/Ctrl/Meta
+    Store.state && !Store.state.lockBlack &&          // lukitus pois
+    canEdit()                                         // oma vuoro
+  ){
+    Store.cells[keyFor(r,c)] = { v:data.v, b:!data.b };
+    render();
+  }
+});
       cell.appendChild(inp); grid.appendChild(cell);
     }
   }
@@ -224,7 +238,15 @@ function refreshButtons(){ takeTurnBtn.disabled=!Store.myName||!cloud.enabled; r
 
 if (reconnectBtn) reconnectBtn.addEventListener('click', async function(){ setStatus('', 'Yhdistetään Firebaseen…'); try{ await cloud.load(); setStatus('ok','Firebase-yhteys OK'); startPoll(); refreshButtons(); applyEditability(); } catch(e){ setStatus('err','Pilviyhteys epäonnistui – tarkista parametrit'); } });
 
-if (lockBlackEl) lockBlackEl.addEventListener('change', function(){ Store.state.lockBlack=!!lockBlackEl.checked; applyEditability(); });
+if (lockBlackEl) lockBlackEl.addEventListener('change', async function(){
+  Store.state.lockBlack = !!lockBlackEl.checked;
+  applyEditability();
+
+  // Kirjoita lukitus heti pilveen, ettei polli kumoa paikallista arvoa
+  if (cloud.enabled) {
+    try { await cloud.saveCurrentOnly(); } catch (e) { /* hiljaa */ }
+  }
+});
 
 if (signInBtn) signInBtn.addEventListener('click', async function(){ if(!cloud.enabled){ alert('Ei pilviyhteyttä'); return; } var name=(playerSelect.value||'').trim(); if(!name){ alert('Valitse nimesi listasta'); return; } Store.myName=name; try{ var data=await cloud.read(); var base=data||{cells:{}, state:{lockBlack:true}, players:{}, active:null, meta:{title:''}, updatedAt:0}; base.players=base.players||{}; base.players[name]=true; base.updatedAt=Date.now(); await cloud.write(base); Store.players=base.players; Store.updatedAt=base.updatedAt; renderPlayersLine(Store.players); refreshButtons(); applyEditability(); } catch(e){ alert('Kirjautuminen epäonnistui'); } });
 
