@@ -74,7 +74,7 @@
     opacity: 1;
     color: #0b1116;
     background: transparent;
-    /* cursor: not-allowed; */ /* voit ottaa käyttöön jos haluat osoittimen kertovan ettei voi muokata */
+    /* cursor: not-allowed; */ /* halutessasi voit ottaa käyttöön */
   }
   .cell.black{ background:#0f1720; border-color:#0f1720; }
   .cell.black input{ visibility:hidden; pointer-events:none; }
@@ -219,7 +219,7 @@ const Store = {
 function canEdit(){
   // Offline: vapaa muokkaus
   if (!cloud.enabled) return true;
-  // Pilvi: vain vuoronhaltija
+  // Pilvessä: vain vuoronhaltija
   return !!(Store.active && Store.active.name === Store.myName);
 }
 function applyEditability(){
@@ -310,6 +310,8 @@ function render(){
           Store.cells[keyFor(r,c)] = { v:data.v, b:!data.b }; render();
         }
       });
+
+      cell.appendChild(inp);          /* ← älä unohda lisätä input soluun */
       grid.appendChild(cell);
     }
   }
@@ -363,7 +365,7 @@ const cloud = {
     return res.json();
   },
   async appendSnapshot(id, snap){
-    // tärkeää: kääre { [id]: snap } → ei ylikirjoita koko solmua
+    // tärkeää: kääre { [id]: snap } → ei ylikirjoitusta
     const res = await fetch(this.pathSnapshots(), {
       method:'PATCH',
       headers:{'Content-Type':'application/json'},
