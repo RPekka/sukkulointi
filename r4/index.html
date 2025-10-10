@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="fi">
+<head>
+<meta charset="utf-8" />
+<title>Siirrytään…</title>
+<meta name="referrer" content="same-origin">
+<meta http-equiv="refresh" content="0; url=TARGET_URL">
+<style>
+  body{font:16px system-ui, -apple-system, Segoe UI, Roboto, sans-serif; padding:24px; color:#0b1116}
+  a{color:#0b6bcb}
+</style>
+<script>
+  (function(){
+    var url = "https://rpekka.github.io/sukkulointi/?mode=firebase&db=https%3A%2F%2Fsukkulointi-default-rtdb.europe-west1.firebasedatabase.app&room=R4&apiKey=AIzaSyBXMIGu6U1w5SfuartQ-0Xx4E61W7j0U8s";
+    try { url = decodeURI(url); } catch(e){}
+    location.replace(url);
+  })();
+</script>
+</head>
+<body>
+  <p>Siirretään sut eteenpäin… Jos selain ei siirrä automaattisesti, klikkaa:
+     <a id="link" href="TARGET_URL">avaa ristikko</a>.</p>
+  <script>document.getElementById('link').href = "https://rpekka.github.io/sukkulointi/?mode=firebase&db=https%3A%2F%2Fsukkulointi-default-rtdb.europe-west1.firebasedatabase.app&room=R4&apiKey=AIzaSyBXMIGu6U1w5SfuartQ-0Xx4E61W7j0U8s";</script>
+</body>
+</html>
