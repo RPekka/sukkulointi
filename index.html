@@ -1,5 +1,5 @@
 <!doctype html>
-<!-- Version 18 (chat: input ylhäällä, 6 viimeisintä, kirjautuminen pakollinen) -->
+<!-- Version 19 (toast: "Tallennettu pilveen" + reconnect-siivo) -->
 <html lang="fi">
 <head>
 <meta charset="utf-8" />
@@ -60,6 +60,18 @@
   .muted { color:#64748b; font-size:12px; }
 
   @media (max-width: 980px){ .wrap{ grid-template-columns: 1fr; } .right{ position:static; } }
+
+  /* Toast: “Tallennettu pilveen” */
+  .toast{
+    position:fixed; right:16px; bottom:16px;
+    background:#0b1116; color:#fff;
+    padding:10px 12px; border-radius:10px;
+    box-shadow:0 6px 20px #00000022;
+    opacity:0; transform:translateY(8px);
+    pointer-events:none; z-index:9999; font-size:14px;
+    transition:opacity .25s ease, transform .25s ease;
+  }
+  .toast.show{ opacity:1; transform:translateY(0); }
 </style>
 </head>
 <body>
@@ -114,7 +126,7 @@
         <option>Taru</option><option>Teemu</option>
       </select>
 
-      <!-- Ylärivi (Lataa-painike poistettu, kytkeydytään automaattisesti) -->
+      <!-- Ylärivi -->
       <div class="btn-row" style="margin-bottom:8px;">
         <button id="signIn">Kirjaudu</button>
       </div>
@@ -151,7 +163,7 @@ var mode = (params.get('mode')||'offline').toLowerCase();
 var room = (params.get('room')||'POP1').trim();
 var dbURL = (params.get('db')||'').replace(/\/$/, '');
 var authToken = (params.get('auth')||'').trim(); // valinnainen
-      var apiKey = (params.get('apiKey')||'').trim(); // Firebase Web API key (Identity Toolkit)
+var apiKey = (params.get('apiKey')||'').trim(); // Firebase Web API key (Identity Toolkit)
 
 async function anonSignIn(){
   if (!apiKey) { throw new Error('Puuttuu apiKey-parametri'); }
@@ -169,7 +181,6 @@ async function anonSignIn(){
   return authToken;
 }
 
-
 // (valinnainen fallback – ei vaikuta kun käytät parametreja)
 if (!params.get('mode')) { mode = 'firebase'; }
 if (!dbURL) { dbURL = 'https://sukkulointi-default-rtdb.europe-west1.firebasedatabase.app'; }
@@ -178,11 +189,22 @@ if (!dbURL) { dbURL = 'https://sukkulointi-default-rtdb.europe-west1.firebasedat
 var titleEl = document.getElementById('title');
 var playersLineEl = document.getElementById('playersLine');
 function setHeader(roomName, title){ titleEl.textContent = 'Sanaristikko '+roomName.toUpperCase()+ (title? ' — '+title : ''); }
-var statusDot = document.getElementById('statusDot'); var statusText = document.getElementById('statusText'); var activeInfo = document.getElementById('activeInfo'); var reconnectBtn = document.getElementById('reconnect');
+var statusDot = document.getElementById('statusDot'); var statusText = document.getElementById('statusText'); var activeInfo = document.getElementById('activeInfo');
 function setStatus(cls, msg){ statusDot.classList.remove('ok','err'); if(cls) statusDot.classList.add(cls); statusText.textContent = msg; }
 function setActiveInfoTxt(txt){ activeInfo.textContent = txt? ' — '+txt : ''; }
 function renderPlayersLine(playersObj){ var names = Object.keys(playersObj||{}).filter(function(k){ return playersObj[k]; }); playersLineEl.textContent = names.length ? ('pelaajat: ' + names.join(', ')) : ''; }
 function fmt(ts){ var d = new Date(ts); var pad = function(n){ return String(n).padStart(2,'0'); }; return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate())+' '+pad(d.getHours())+':'+pad(d.getMinutes())+':'+pad(d.getSeconds()); }
+
+/* Pieni toast-apu */
+function showToast(msg, ms){
+  ms = ms || 1800;
+  var el = document.getElementById('toast');
+  if(!el) return;
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(showToast._t);
+  showToast._t = setTimeout(function(){ el.classList.remove('show'); }, ms);
+}
 
 /* =========================
    UI-ELEMENTIT & TILAT
@@ -261,9 +283,6 @@ var chatList=document.getElementById('chatList');
 
 function refreshButtons(){ takeTurnBtn.disabled=!Store.myName||!cloud.enabled; releaseTurnBtn.disabled=!(Store.active && Store.active.name===Store.myName); }
 
-// Reconnect
-if (reconnectBtn) reconnectBtn.addEventListener('click', async function(){ setStatus('', 'Yhdistetään Firebaseen…'); try{ await cloud.load(); setStatus('ok','Firebase-yhteys OK'); startPoll(); refreshButtons(); applyEditability(); } catch(e){ setStatus('err','Pilviyhteys epäonnistui – tarkista parametrit'); } });
-
 // Lukitus
 if (lockBlackEl) lockBlackEl.addEventListener('change', async function(){ Store.state.lockBlack=!!lockBlackEl.checked; applyEditability(); if (cloud.enabled){ try{ await cloud.saveCurrentOnly(); } catch(e){} } });
 
@@ -305,7 +324,7 @@ if (signInBtn) signInBtn.addEventListener('click', async function(){
   }
 });
 
-      // writeActive – optimistinen päivitys UI:hin + kirjoitus pilveen
+// writeActive – optimistinen päivitys UI:hin + kirjoitus pilveen
 async function writeActive(to){
   // 1) Optimistinen paikallinen tila ja UI
   var prevActive = Store.active;
@@ -339,11 +358,22 @@ async function writeActive(to){
   }
 }
 
-
 // Vuoro
 if (takeTurnBtn) takeTurnBtn.addEventListener('click', async function(){ if(!Store.myName){ alert('Kirjaudu ensin'); return; } if(!cloud.enabled){ alert('Pilvimoodi ei ole käytössä'); return; } await writeActive({ name:Store.myName, since:Date.now() }); refreshButtons(); });
 
-if (releaseTurnBtn) releaseTurnBtn.addEventListener('click', async function(){ if(Store.active && Store.active.name!==Store.myName){ alert('Vuoro on '+Store.active.name); return; } if(!cloud.enabled){ alert('Pilvimoodi ei ole käytössä'); return; } try{ await cloud.saveCurrentOnly(); }catch(e){ alert('Tallennus epäonnistui'); return; } await writeActive(null); refreshButtons(); applyEditability(); });
+if (releaseTurnBtn) releaseTurnBtn.addEventListener('click', async function(){
+  if(Store.active && Store.active.name!==Store.myName){ alert('Vuoro on '+Store.active.name); return; }
+  if(!cloud.enabled){ alert('Pilvimoodi ei ole käytössä'); return; }
+  try{
+    await cloud.saveCurrentOnly();
+    showToast('Tallennettu pilveen'); // uusi vihje
+  }catch(e){
+    alert('Tallennus epäonnistui'); return;
+  }
+  await writeActive(null);
+  refreshButtons();
+  applyEditability();
+});
 
 // Chat – merkkilaskuri
 if (chatInput) chatInput.addEventListener('input', function(){ var val = chatInput.value || ''; if (val.length>200) { chatInput.value = val.slice(0,200); val = chatInput.value; } if (chatCount) chatCount.textContent = val.length + '/200'; });
@@ -374,7 +404,7 @@ document.getElementById('makeLink').addEventListener('click', async function(){ 
 /* =========================
    INIT
    ========================= */
-      (function init(){
+(function init(){
   lockBlackEl.checked = !!Store.state.lockBlack;
   setHeader(room, '');
   render();
@@ -398,5 +428,9 @@ document.getElementById('makeLink').addEventListener('click', async function(){ 
   }
 })();
 </script>
+
+<!-- Toast-elementti -->
+<div id="toast" class="toast" aria-live="polite" role="status"></div>
+
 </body>
 </html>
