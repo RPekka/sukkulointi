@@ -10,7 +10,7 @@
 <meta http-equiv="Content-Security-Policy"
       content="default-src 'self';
                script-src 'self' 'unsafe-inline' https://www.gstatic.com https://www.googleapis.com;
-               connect-src 'self' https://*.firebaseio.com https://*.firebasedatabase.app;
+               connect-src 'self' https://*.firebaseio.com https://*.firebasedatabase.app https://identitytoolkit.googleapis.com https://securetoken.googleapis.com;
                style-src 'self' 'unsafe-inline';
                img-src 'self' data:;
                frame-ancestors 'none';
@@ -151,6 +151,24 @@ var mode = (params.get('mode')||'offline').toLowerCase();
 var room = (params.get('room')||'POP1').trim();
 var dbURL = (params.get('db')||'').replace(/\/$/, '');
 var authToken = (params.get('auth')||'').trim(); // valinnainen
+      var apiKey = (params.get('apiKey')||'').trim(); // Firebase Web API key (Identity Toolkit)
+
+async function anonSignIn(){
+  if (!apiKey) { throw new Error('Puuttuu apiKey-parametri'); }
+  const res = await fetch(
+    'https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=' + encodeURIComponent(apiKey),
+    {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ returnSecureToken: true })
+    }
+  );
+  if (!res.ok) { throw new Error('Anonymous sign-in epäonnistui'); }
+  const data = await res.json();
+  authToken = data.idToken || '';
+  return authToken;
+}
+
 
 // (valinnainen fallback – ei vaikuta kun käytät parametreja)
 if (!params.get('mode')) { mode = 'firebase'; }
@@ -250,9 +268,42 @@ if (reconnectBtn) reconnectBtn.addEventListener('click', async function(){ setSt
 if (lockBlackEl) lockBlackEl.addEventListener('change', async function(){ Store.state.lockBlack=!!lockBlackEl.checked; applyEditability(); if (cloud.enabled){ try{ await cloud.saveCurrentOnly(); } catch(e){} } });
 
 // Kirjautuminen
-if (signInBtn) signInBtn.addEventListener('click', async function(){ if(!cloud.enabled){ alert('Ei pilviyhteyttä'); return; } var name=(playerSelect.value||'').trim(); if(!name){ alert('Valitse nimesi listasta'); return; } Store.myName=name; try{ var data=await cloud.read(); var base=data||{cells:{}, state:{lockBlack:true}, players:{}, active:null, meta:{title:''}, chat:[], updatedAt:0}; base.players=base.players||{}; base.players[name]=true; base.updatedAt=Date.now(); await cloud.write(base); Store.players=base.players; Store.updatedAt=base.updatedAt; renderPlayersLine(Store.players); refreshButtons(); applyEditability(); } catch(e){ alert('Kirjautuminen epäonnistui'); } });
+if (signInBtn) signInBtn.addEventListener('click', async function(){
+  if (!cloud.enabled) { alert('Ei pilviyhteyttä'); return; }
 
-async function writeActive(to){ try{ var data=await cloud.read(); var base=data||{cells:{},state:{lockBlack:true},players:{},meta:{title:Store.meta.title||''}, chat:[]}; base.active=to; base.updatedAt=Date.now(); await cloud.write(base); Store.active=to; Store.updatedAt=base.updatedAt; Store.meta=base.meta; setHeader(room, Store.meta.title||''); setActiveInfoTxt(Store.active?('Vuoro: '+Store.active.name):'Ei lukkoa'); applyEditability(); } catch(e){ alert('Vuoron kirjaus epäonnistui'); } }
+  // varmista, että meillä on Firebase Auth -token (Anonymous)
+  if (!authToken) {
+    try {
+      if (!apiKey) { throw new Error('Puuttuu apiKey-parametri'); }
+      await anonSignIn();
+      // yritä ladata huone heti tokenilla (status kuntoon ja poll päälle)
+      try { await cloud.load(); setStatus('ok','Firebase-yhteys OK'); startPoll(); } catch(_) {}
+    } catch (e) {
+      alert('Kirjautuminen Firebaseen epäonnistui (anon). Lisää apiKey URL-parametriin tai tarkista Authentication.');
+      return;
+    }
+  }
+
+  var name = (playerSelect.value || '').trim();
+  if (!name) { alert('Valitse nimesi listasta'); return; }
+  Store.myName = name;
+
+  try {
+    var data = await cloud.read();
+    var base = data || { cells:{}, state:{lockBlack:true}, players:{}, active:null, meta:{title:''}, chat:[], updatedAt:0 };
+    base.players = base.players || {};
+    base.players[name] = true;
+    base.updatedAt = Date.now();
+    await cloud.write(base);
+    Store.players = base.players;
+    Store.updatedAt = base.updatedAt;
+    renderPlayersLine(Store.players);
+    refreshButtons();
+    applyEditability();
+  } catch (e) {
+    alert('Kirjautuminen epäonnistui');
+  }
+});
 
 // Vuoro
 if (takeTurnBtn) takeTurnBtn.addEventListener('click', async function(){ if(!Store.myName){ alert('Kirjaudu ensin'); return; } if(!cloud.enabled){ alert('Pilvimoodi ei ole käytössä'); return; } await writeActive({ name:Store.myName, since:Date.now() }); refreshButtons(); });
@@ -288,7 +339,29 @@ document.getElementById('makeLink').addEventListener('click', async function(){ 
 /* =========================
    INIT
    ========================= */
-(function init(){ lockBlackEl.checked=!!Store.state.lockBlack; setHeader(room, ''); render(); renderChat(); applyEditability(); if (mode==='firebase' && dbURL){ if(reconnectBtn) reconnectBtn.style.display='inline-block'; setStatus('', 'Yhdistetään Firebaseen…'); cloud.load().then(function(){ setStatus('ok','Firebase-yhteys OK'); startPoll(); refreshButtons(); applyEditability(); }).catch(function(){ setStatus('err','Pilviyhteys epäonnistui – yritä päivittää sivu (Ctrl+F5)'); }); } else { setStatus('', 'Offline-tila (paikallinen)'); } })();
+      (function init(){
+  lockBlackEl.checked = !!Store.state.lockBlack;
+  setHeader(room, '');
+  render();
+  renderChat();
+  applyEditability();
+
+  if (mode === 'firebase' && dbURL) {
+    setStatus('', apiKey ? 'Yhdistetään Firebaseen…' : 'Valmiina – kirjaudu, niin yhdistetään pilveen');
+    (async () => {
+      try {
+        if (!authToken && apiKey) { await anonSignIn(); }
+        await cloud.load();
+        setStatus('ok','Firebase-yhteys OK');
+        startPoll(); refreshButtons(); applyEditability();
+      } catch (e) {
+        setStatus('err','Pilviyhteys epäonnistui – kirjaudu tai päivitä (Ctrl+F5)');
+      }
+    })();
+  } else {
+    setStatus('', 'Offline-tila (paikallinen)');
+  }
+})();
 </script>
 </body>
 </html>
