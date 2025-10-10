@@ -305,6 +305,41 @@ if (signInBtn) signInBtn.addEventListener('click', async function(){
   }
 });
 
+      // writeActive – optimistinen päivitys UI:hin + kirjoitus pilveen
+async function writeActive(to){
+  // 1) Optimistinen paikallinen tila ja UI
+  var prevActive = Store.active;
+  Store.active = to;
+  setActiveInfoTxt(Store.active ? ('Vuoro: ' + Store.active.name) : 'Ei lukkoa');
+  applyEditability();
+  refreshButtons();
+
+  try{
+    // 2) Hae uusin pohja, päivitä active ja leima, kirjoita pilveen
+    var data = await cloud.read();
+    var base = data || { cells:{}, state:{lockBlack:true}, players:{}, active:null, meta:{title:Store.meta.title||''}, chat:[] };
+    base.active = to;
+    base.updatedAt = Date.now();
+    await cloud.write(base);
+
+    // 3) Varmista paikallinen peilaus palvelimen arvoilla
+    Store.updatedAt = base.updatedAt;
+    Store.meta = base.meta || Store.meta;
+    setHeader(room, Store.meta.title || '');
+    setActiveInfoTxt(Store.active ? ('Vuoro: ' + Store.active.name) : 'Ei lukkoa');
+    applyEditability();
+    refreshButtons();
+  } catch(e){
+    // 4) Palauta vanha tila jos epäonnistuu
+    Store.active = prevActive;
+    setActiveInfoTxt(Store.active ? ('Vuoro: ' + (Store.active.name||'')) : 'Ei lukkoa');
+    applyEditability();
+    refreshButtons();
+    alert('Vuoron kirjaus epäonnistui');
+  }
+}
+
+
 // Vuoro
 if (takeTurnBtn) takeTurnBtn.addEventListener('click', async function(){ if(!Store.myName){ alert('Kirjaudu ensin'); return; } if(!cloud.enabled){ alert('Pilvimoodi ei ole käytössä'); return; } await writeActive({ name:Store.myName, since:Date.now() }); refreshButtons(); });
 
