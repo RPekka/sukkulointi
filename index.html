@@ -1,5 +1,5 @@
 <!doctype html>
-<!-- Version 19 (toast: "Tallennettu pilveen" + reconnect-siivo) -->
+<!-- Version 20 (apiKey kovitettu koodiin → URL riittää ?room=R4) -->
 <html lang="fi">
 <head>
 <meta charset="utf-8" />
@@ -163,7 +163,7 @@ var mode = (params.get('mode')||'offline').toLowerCase();
 var room = (params.get('room')||'POP1').trim();
 var dbURL = (params.get('db')||'').replace(/\/$/, '');
 var authToken = (params.get('auth')||'').trim(); // valinnainen
-var apiKey = (params.get('apiKey')||'').trim(); // Firebase Web API key (Identity Toolkit)
+var apiKey = (params.get('apiKey') || 'AIzaSyBXMIGu6U1w5SfuartQ-0Xx4E61W7j0U8s').trim(); // kovitettu fallback
 
 async function anonSignIn(){
   if (!apiKey) { throw new Error('Puuttuu apiKey-parametri'); }
